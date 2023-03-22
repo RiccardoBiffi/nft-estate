@@ -1,0 +1,40 @@
+dotenv: .env
+
+wallets:
+  from_key: ${PRIVATE_KEY}
+
+subscriptions:
+  chainlink: ${CHAINLINK_SUBSCRIPTION_ID}
+
+
+
+dependencies:
+  # - <organizzation/repo>@<version> downloaded from GitHub
+  - smartcontractkit/chainlink-brownie-contracts@0.6.0
+  - smartcontractkit/chainlink@1.11.0
+  - OpenZeppelin/openzeppelin-contracts@4.8.1
+
+compiler:
+  solc:
+    remappings:
+      - '@brownie-cl=smartcontractkit/chainlink-brownie-contracts@0.6.0'
+      - '@chainlink=smartcontractkit/chainlink@1.11.0'
+      - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.8.1'
+
+
+
+networks:
+  default: development
+  development: 
+    keyhash: '0xd89b2bf150e3b9e13446986e571fb9cab24b13cea0a43ea20a6049a85cc807cc'
+    verify: False
+  mainnet-fork:
+    verify: False
+  goerli:
+    fau_token: '0xBA62BCfcAaFc6622853cca2BE6Ac7d845BC0f2Dc'
+    weth_token: '0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6'
+    btc_usd_feed: '0xA39434A63A52E749F02807ae27335515BA4b07F7'
+    eth_usd_feed: '0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e'
+    dai_usd_feed: '0x0d79df66BE487753B02D015Fb622DED7f0E9798d'
+    eur_usd_feed: '0x21420f2Fa4082d4Bf023698bB574F7D510345260'
+    verify: True
