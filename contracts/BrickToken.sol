@@ -18,11 +18,11 @@ contract BrickToken is ERC20, AllowTokens, TokenValue {
         address from,
         address exchangeToken,
         uint256 amountIn,
-        uint256 amountBetOut
+        uint256 amountOut
     );
     event CashOut(address admin);
 
-    constructor(uint256 initialSupply) ERC20("Bet Token", "BET") {
+    constructor(uint256 initialSupply) ERC20("Coincrete", "BRICK") {
         companyBrick = (initialSupply / 10) * 8;
         buyableBrick = (initialSupply - companyBrick) / 2;
         aprBrick = initialSupply - companyBrick - buyableBrick;
@@ -34,7 +34,7 @@ contract BrickToken is ERC20, AllowTokens, TokenValue {
     function buy(uint256 amount, address exchangeToken) public {
         require(
             isTokenAllowed(exchangeToken),
-            "Cannot buy BET with this token"
+            "Cannot buy BRICK with this token"
         );
         require(amount > 0, "Amount must be more than 0 tokens");
 
@@ -42,13 +42,13 @@ contract BrickToken is ERC20, AllowTokens, TokenValue {
         token_deposit[exchangeToken] = amount;
 
         uint256 valueSent = getValueFromToken(amount, exchangeToken);
-        uint256 buyedBetTokens = getTokenFromValue(valueSent, address(this));
-        buyableBrick -= buyedBetTokens;
+        uint256 buyedTokens = getTokenFromValue(valueSent, address(this));
+        buyableBrick -= buyedTokens;
 
         IERC20(exchangeToken).transferFrom(msg.sender, address(this), amount);
-        _transfer(address(this), msg.sender, buyedBetTokens);
+        _transfer(address(this), msg.sender, buyedTokens);
 
-        emit Exchange(msg.sender, exchangeToken, amount, buyedBetTokens);
+        emit Exchange(msg.sender, exchangeToken, amount, buyedTokens);
     }
 
     function cashOut() public onlyOwner {
