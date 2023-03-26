@@ -1,6 +1,6 @@
 # NFT real estate
 The protocol allows users to buy an NFT that rapresents a tokenized rent of a physical house.
-The NFT grant and API that can be withdrawed anytime by the user. The token is bought with stablecoins and the API is payed in $BRICK, the token of Coincrete, the company owning the houses.
+The NFT grants and API that can be withdrawed anytime by the user. The token is bought with stablecoins and the API is payed in $BRICK, the token of Coincrete, which is the company owning the houses.
 
 The platform allows the users to:
 1. See the catalog of the houses including their position and performance.
@@ -17,4 +17,4 @@ The owner is a public address managed with a multi-signature wallet that can.
   - change the sell price of $BRICK
 
 ## Protocol token
-The $BRICK token mainly rappresents a share of the Coincrete company.
+The $BRICK token mainly rappresents a share of the Coincrete company. 
