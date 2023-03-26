@@ -1,7 +1,7 @@
 from sqlite3 import Time
 import time
 from brownie import accounts, network, config
-from brownie import BrickToken, BetEvent
+from brownie import BrickToken
 from scripts.utilities import (
     LOCAL_BLOCKCHAIN_ENVIRONMENTS,
     MockContract,
