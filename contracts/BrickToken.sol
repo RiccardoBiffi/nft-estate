@@ -2,72 +2,36 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./utils/AllowTokens.sol";
-import "./utils/TokenValue.sol";
+import "./utils/Tradable.sol";
 
-contract BrickToken is ERC20, AllowTokens, TokenValue {
-    uint256 public buyableBrick;
+contract BrickToken is Tradable {
     uint256 public companyBrick;
     uint256 public aprBrick;
-
-    address[] public tokenWithDeposits;
-    mapping(address => uint256) public token_deposit;
-
-    event Exchange(
-        address from,
-        address exchangeToken,
-        uint256 amountIn,
-        uint256 amountOut
-    );
-    event CashOut(address admin);
+    uint256 public sellSpread;
 
     constructor(uint256 initialSupply) ERC20("Coincrete", "BRICK") {
-        companyBrick = (initialSupply / 10) * 8;
-        buyableBrick = (initialSupply - companyBrick) / 2;
-        aprBrick = initialSupply - companyBrick - buyableBrick;
-        _mint(address(this), buyableBrick);
-        _mint(address(this), aprBrick);
+        sellSpread = 2000; // 20%
+        companyBrick = (initialSupply * 8) / 10;
+        buyableTokens = (initialSupply - companyBrick) / 2;
+        aprBrick = initialSupply - companyBrick - buyableTokens;
+        _mint(address(this), buyableTokens);
+        _mint(address(this), aprBrick); // todo send to NFT contract
         _mint(msg.sender, companyBrick);
     }
 
-    function buy(uint256 amount, address exchangeToken) public {
+    function setSellSpread(uint256 spread) external onlyOwner {
         require(
-            isTokenAllowed(exchangeToken),
-            "Cannot buy BRICK with this token"
+            spread >= 0 && spread <= 10000,
+            "Spread must be >= 0 and <= 10000"
         );
-        require(amount > 0, "Amount must be more than 0 tokens");
-
-        tokenWithDeposits.push(exchangeToken);
-        token_deposit[exchangeToken] = amount;
-
-        uint256 valueSent = getValueFromToken(amount, exchangeToken);
-        uint256 buyedTokens = getTokenFromValue(valueSent, address(this));
-        buyableBrick -= buyedTokens;
-
-        IERC20(exchangeToken).transferFrom(msg.sender, address(this), amount);
-        _transfer(address(this), msg.sender, buyedTokens);
-
-        emit Exchange(msg.sender, exchangeToken, amount, buyedTokens);
+        sellSpread = spread;
     }
 
-    function cashOut() public onlyOwner {
-        for (uint256 i = 0; i < tokenWithDeposits.length; i++) {
-            IERC20(tokenWithDeposits[i]).transfer(
-                owner(),
-                token_deposit[tokenWithDeposits[i]]
-            );
-            delete token_deposit[tokenWithDeposits[i]];
-        }
+    function sell(uint256 amount, address exchangeToken) public override {
+        uint256 amountToKeep = (amount * sellSpread) / 10000;
+        uint256 amountToSell = amount - amountToKeep;
+        _transfer(msg.sender, address(this), amountToKeep);
 
-        delete tokenWithDeposits;
-        emit CashOut(msg.sender);
-    }
-
-    function setTokenPriceFeed(
-        address token,
-        address priceFeed
-    ) public override onlyOwner {
-        super.setTokenPriceFeed(token, priceFeed);
+        super.sell(amountToSell, exchangeToken);
     }
 }
