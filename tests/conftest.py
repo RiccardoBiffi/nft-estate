@@ -44,8 +44,6 @@ def token_value(account):
 @pytest.fixture
 def brick_token(supply, dai, amount, token_value_DAI, account):
     bt = BrickToken.deploy(supply, {"from": account})
-    # transfer all coins to BetToken
-    bt.transfer(bt.address, bt.balanceOf(account), {"from": account})
     bt.approve(bt.address, supply, {"from": account})
     dai.approve(bt.address, amount, {"from": account})
     bt.addAllowedToken(dai.address, {"from": account})
