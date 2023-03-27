@@ -13,12 +13,17 @@ from scripts.utilities import get_account
 
 @pytest.fixture
 def amount():
-    return Web3.toWei(1, "ether")
+    return Web3.toWei(10, "ether")
+
+
+@pytest.fixture
+def dai_amount():
+    return Web3.toWei(100, "ether")
 
 
 @pytest.fixture
 def supply():
-    return Web3.toWei(1000, "ether")
+    return Web3.toWei(1000000, "ether")
 
 
 @pytest.fixture
@@ -42,10 +47,10 @@ def token_value(account):
 
 
 @pytest.fixture
-def brick_token(supply, dai, amount, token_value_DAI, account):
+def brick_token(supply, dai, dai_amount, token_value_DAI, account):
     bt = BrickToken.deploy(supply, {"from": account})
     bt.approve(bt.address, supply, {"from": account})
-    dai.approve(bt.address, amount, {"from": account})
+    dai.approve(bt.address, dai_amount, {"from": account})
     bt.addAllowedToken(dai.address, {"from": account})
     bt.addAllowedToken(bt.address, {"from": account})
     bt.setTokenPriceFeed(dai.address, token_value_DAI, {"from": account})
@@ -55,9 +60,9 @@ def brick_token(supply, dai, amount, token_value_DAI, account):
 
 # region DAI
 @pytest.fixture
-def dai(amount, account):
+def dai(dai_amount, account):
     mock_dai = MockDAI.deploy({"from": account})
-    mock_dai.mint(amount, {"from": account})
+    mock_dai.mint(dai_amount, {"from": account})
     return mock_dai
 
 
