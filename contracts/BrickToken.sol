@@ -37,7 +37,7 @@ contract BrickToken is Tradable {
     function sell(uint256 amount, address exchangeToken) public override {
         uint256 amountToKeep = (amount * sellSpread) / 10000;
         uint256 amountToSell = amount - amountToKeep;
-        _transfer(msg.sender, address(this), amountToKeep);
+        super.fillUp(amountToKeep, address(this));
 
         super.sell(amountToSell, exchangeToken);
     }

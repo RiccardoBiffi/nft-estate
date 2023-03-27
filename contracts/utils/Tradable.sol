@@ -74,6 +74,10 @@ abstract contract Tradable is ERC20, ITradable, AllowTokens, TokenValue {
             "There are not enought available tokens to sell"
         );
 
+        token_deposit[exchangeToken] -= tokensToSend;
+        if (token_deposit[exchangeToken] == 0)
+            removeTokenDeposit(exchangeToken);
+
         buyableTokens += amount;
 
         _transfer(msg.sender, address(this), amount);
@@ -82,7 +86,7 @@ abstract contract Tradable is ERC20, ITradable, AllowTokens, TokenValue {
         emit Sold(msg.sender, amount, exchangeToken, tokensToSend);
     }
 
-    function fillUp(uint256 amount, address token) external onlyOwner {
+    function fillUp(uint256 amount, address token) public {
         require(isTokenAllowed(token), "Cannot fill up with this token");
         require(amount > 0, "Amount must be more than 0 tokens");
 
@@ -96,5 +100,17 @@ abstract contract Tradable is ERC20, ITradable, AllowTokens, TokenValue {
         }
 
         emit FilledUp(amount, token);
+    }
+
+    function removeTokenDeposit(address token) internal {
+        for (uint256 i = 0; i < tokenWithDeposits.length; i++) {
+            if (tokenWithDeposits[i] == token) {
+                tokenWithDeposits[i] = tokenWithDeposits[
+                    tokenWithDeposits.length - 1
+                ];
+                tokenWithDeposits.pop();
+                break;
+            }
+        }
     }
 }

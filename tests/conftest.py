@@ -22,6 +22,11 @@ def dai_amount():
 
 
 @pytest.fixture
+def eth_amount():
+    return Web3.toWei(100, "ether")
+
+
+@pytest.fixture
 def supply():
     return Web3.toWei(1000000, "ether")
 
@@ -47,14 +52,19 @@ def token_value(account):
 
 
 @pytest.fixture
-def brick_token(supply, dai, dai_amount, token_value_DAI, account):
+def brick_token(
+    supply, dai, dai_amount, eth, token_value_DAI, token_value_ETH, account
+):
     bt = BrickToken.deploy(supply, {"from": account})
     bt.approve(bt.address, supply, {"from": account})
     dai.approve(bt.address, dai_amount, {"from": account})
-    bt.addAllowedToken(dai.address, {"from": account})
+    eth.approve(bt.address, dai_amount, {"from": account})
     bt.addAllowedToken(bt.address, {"from": account})
-    bt.setTokenPriceFeed(dai.address, token_value_DAI, {"from": account})
+    bt.addAllowedToken(dai.address, {"from": account})
+    bt.addAllowedToken(eth.address, {"from": account})
     bt.setTokenPriceFeed(bt.address, token_value_DAI, {"from": account})
+    bt.setTokenPriceFeed(dai.address, token_value_DAI, {"from": account})
+    bt.setTokenPriceFeed(eth.address, token_value_ETH, {"from": account})
     return bt
 
 
@@ -80,9 +90,9 @@ def token_value_DAI(DAI_price, decimals, account):
 
 # region WETH
 @pytest.fixture
-def eth(amount, account):
+def eth(eth_amount, account):
     mock_eth = MockWETH.deploy({"from": account})
-    mock_eth.mint(amount, {"from": account})
+    mock_eth.mint(eth_amount, {"from": account})
     return mock_eth
 
 

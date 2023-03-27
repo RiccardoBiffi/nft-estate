@@ -30,7 +30,7 @@ def test_can_deploy_contract():
 
 
 # region buy
-def test_buy_success(brick_token, dai, amount, account):
+def test_buy_success_dai(brick_token, dai, amount, account):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
@@ -55,6 +55,42 @@ def test_buy_success(brick_token, dai, amount, account):
     assert tx.events["Bought"]["exchangeToken"] == dai.address
     assert tx.events["Bought"]["amountIn"] == amount
     assert tx.events["Bought"]["amountOut"] == amount
+
+
+def test_buy_success_eth(brick_token, eth, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    initial_supply = brick_token.balanceOf(brick_token.address, {"from": account})
+    account_initial_balance = brick_token.balanceOf(account)
+    old_dai_balance = eth.balanceOf(account)
+    old_buyable_tokens = brick_token.buyableTokens()
+
+    # Act
+    tx = brick_token.buy(amount, eth.address, {"from": account})
+
+    # Assert
+    assert eth.balanceOf(account) == old_dai_balance - amount
+    assert eth.balanceOf(brick_token.address) == amount
+    assert brick_token.tokenWithDeposits(0) == eth.address
+    assert brick_token.token_deposit(eth.address) == amount
+    assert (
+        brick_token.balanceOf(brick_token.address)
+        == initial_supply - tx.events["Bought"]["amountOut"]
+    )
+    assert (
+        brick_token.balanceOf(account)
+        == account_initial_balance + tx.events["Bought"]["amountOut"]
+    )
+    assert (
+        brick_token.buyableTokens()
+        == old_buyable_tokens - tx.events["Bought"]["amountOut"]
+    )
+    assert tx.events["Bought"]["from"] == account
+    assert tx.events["Bought"]["exchangeToken"] == eth.address
+    assert tx.events["Bought"]["amountIn"] == amount
+    assert tx.events["Bought"]["amountOut"] == amount * 1560
 
 
 def test_buy_success_double_buy(brick_token, dai, amount, account):
@@ -180,28 +216,36 @@ def test_cashout_fail_not_owner(brick_token, dai, amount, account):
 
 # region sell
 
+
 def test_sell_success(brick_token, dai, amount, account):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
     # Arrange
     brick_token.buy(amount, dai.address, {"from": account})
+    old_buyable_tokens = brick_token.buyableTokens()
     old_dai_balance = dai.balanceOf(account)
+    old_contract_dai_balance = dai.balanceOf(brick_token.address)
     old_brick_balance = brick_token.balanceOf(account)
+    amount_sold = amount * 75 // 100
 
     # Act
-    tx = brick_token.sell(amount, dai.address {"from": account})
+    tx = brick_token.sell(amount, dai.address, {"from": account})
 
     # Assert
-    assert dai.balanceOf(account) == old_dai_balance + amount
-    assert dai.balanceOf(brick_token.address) == 0
-    with pytest.raises(exceptions.VirtualMachineError):
-        assert brick_token.tokenWithDeposits(0)
-    assert brick_token.token_deposit(dai.address) == 0
+    assert dai.balanceOf(account) == old_dai_balance + amount_sold
+    assert dai.balanceOf(brick_token.address) == old_contract_dai_balance - amount_sold
+    assert (
+        brick_token.token_deposit(dai.address) == old_contract_dai_balance - amount_sold
+    )
+    assert brick_token.buyableTokens() == old_buyable_tokens + amount
     assert brick_token.balanceOf(account) == old_brick_balance - amount
+    assert brick_token.tokenWithDeposits(0) == dai.address
+    assert brick_token.token_deposit(dai.address) == amount - amount_sold
     assert tx.events["Sold"]["from"] == account
-    assert tx.events["Sold"]["amountIn"] == amount
+    assert tx.events["Sold"]["amountIn"] == amount_sold
     assert tx.events["Sold"]["exchangeToken"] == dai.address
-    assert tx.events["Sold"]["amountOut"] == amount
+    assert tx.events["Sold"]["amountOut"] == amount_sold
+
 
 # endregion
