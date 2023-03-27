@@ -51,7 +51,9 @@ contract MockV3Aggregator is AggregatorV2V3Interface {
         getStartedAt[latestRound] = _startedAt;
     }
 
-    function getRoundData(uint80 _roundId)
+    function getRoundData(
+        uint80 _roundId
+    )
         external
         view
         override
@@ -93,7 +95,7 @@ contract MockV3Aggregator is AggregatorV2V3Interface {
         );
     }
 
-    function description() external view override returns (string memory) {
+    function description() external pure override returns (string memory) {
         return "v0.6/tests/MockV3Aggregator.sol";
     }
 }

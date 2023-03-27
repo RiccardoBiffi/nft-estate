@@ -27,12 +27,12 @@ abstract contract Tradable is ERC20, ITradable, AllowTokens, TokenValue {
     );
     event FilledUp(uint256 amount, address token);
 
-    function buy(uint256 amount, address exchangeToken) external virtual {
+    function buy(uint256 amount, address exchangeToken) public virtual {
         require(isTokenAllowed(exchangeToken), "Cannot buy with this token");
         require(amount > 0, "Amount must be more than 0 tokens");
         require(
             amount <= buyableTokens,
-            "Amount must lower than available tokens"
+            "Amount must be lower than available tokens"
         );
 
         if (token_deposit[exchangeToken] == 0)
