@@ -6,7 +6,13 @@ wallets:
 subscriptions:
   chainlink: ${CHAINLINK_SUBSCRIPTION_ID}
 
-
+ipfs:
+  overwrite_metadata: False
+  upload_type: pinata # pinata | ipfs
+  # these pinata keys can make 500 calls
+  pinata_key: ${PINATA_API_KEY}
+  pinata_secret: ${PINATA_API_SECRET}
+  pinata_jwm: Bearer ${PINATA_JWT}
 
 dependencies:
   # - <organizzation/repo>@<version> downloaded from GitHub

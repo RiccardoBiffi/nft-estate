@@ -5,6 +5,7 @@ import eth_utils
 
 FORKED_LOCAL_ENVIRONMENTS = ["mainnet-fork", "mainnet-fork-dev"]
 LOCAL_BLOCKCHAIN_ENVIRONMENTS = ["development", "ganache-local"]
+OPENSEA_URL = "https://testnets.opensea.io/assets/{}/{}"  # contract_address/token_ID
 DECIMALS = 18
 WETH_STARTING_PRICE = 2000 * 10**DECIMALS
 DAI_STARTING_PRICE = 1 * 10**DECIMALS

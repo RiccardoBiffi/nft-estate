@@ -4,3 +4,7 @@ __pycache__
 .hypothesis/
 build/
 reports/
+
+# ignore generated files
+metadata/*
+!metadata/metadata_template.py
