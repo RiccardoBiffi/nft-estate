@@ -217,7 +217,7 @@ def test_cashout_fail_not_owner(brick_token, dai, amount, account):
 # region sell
 
 
-def test_sell_success(brick_token, dai, amount, account):
+def test_sell_success_dai(brick_token, dai, amount, account):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
@@ -246,6 +246,147 @@ def test_sell_success(brick_token, dai, amount, account):
     assert tx.events["Sold"]["amountIn"] == amount_sold
     assert tx.events["Sold"]["exchangeToken"] == dai.address
     assert tx.events["Sold"]["amountOut"] == amount_sold
+
+
+def test_sell_success_eth(brick_token, eth, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    txb = brick_token.buy(amount, eth.address, {"from": account})
+    amount_bought = txb.events["Bought"]["amountOut"]
+    old_buyable_tokens = brick_token.buyableTokens()
+    old_eth_balance = eth.balanceOf(account)
+    old_contract_eth_balance = eth.balanceOf(brick_token.address)
+    old_brick_balance = brick_token.balanceOf(account)
+    amount_sold = amount * 75 // 100
+
+    # Act
+    tx = brick_token.sell(amount_bought, eth.address, {"from": account})
+
+    # Assert
+    assert eth.balanceOf(account) == old_eth_balance + amount_sold
+    assert eth.balanceOf(brick_token.address) == old_contract_eth_balance - amount_sold
+    assert (
+        brick_token.token_deposit(eth.address) == old_contract_eth_balance - amount_sold
+    )
+    assert brick_token.buyableTokens() == old_buyable_tokens + amount_bought
+    assert brick_token.balanceOf(account) == old_brick_balance - amount_bought
+    assert brick_token.tokenWithDeposits(0) == eth.address
+    assert brick_token.token_deposit(eth.address) == amount - amount_sold
+    assert tx.events["Sold"]["from"] == account
+    assert tx.events["Sold"]["amountIn"] == amount_bought - (amount_bought * 25 // 100)
+    assert tx.events["Sold"]["exchangeToken"] == eth.address
+    assert tx.events["Sold"]["amountOut"] == amount_sold
+
+
+def test_sell_fail_token_not_allowed(brick_token, token, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+
+    # Act
+
+    # Assert
+    with brownie.reverts("Cannot sell to this token"):
+        brick_token.sell(amount, token, {"from": account})
+
+
+def test_sell_fail_amount_is_not_enought(brick_token, dai, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+
+    # Act
+
+    # Assert
+    with brownie.reverts("Amount must be more than 0 tokens"):
+        brick_token.sell(0, dai, {"from": account})
+
+
+def test_sell_fail_token_no_tokens_available(brick_token, dai, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+
+    # Act
+
+    # Assert
+    with brownie.reverts("There are not enought available tokens to sell"):
+        brick_token.sell(amount, dai, {"from": account})
+
+
+# endregion
+
+# region fillUp
+
+
+def test_fillUp_success_dai(brick_token, dai, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    old_dai_balance = dai.balanceOf(account)
+    old_contract_dai_balance = dai.balanceOf(brick_token)
+
+    # Act
+    tx = brick_token.fillUp(amount, dai.address, {"from": account})
+
+    # Assert
+    assert brick_token.tokenWithDeposits(0) == dai.address
+    assert brick_token.token_deposit(dai.address) == old_contract_dai_balance + amount
+    assert dai.balanceOf(account.address) == old_dai_balance - amount
+    assert dai.balanceOf(brick_token.address) == old_contract_dai_balance + amount
+    assert tx.events["FilledUp"]["amount"] == amount
+    assert tx.events["FilledUp"]["token"] == dai.address
+
+
+def test_fillUp_success_brick(brick_token, dai, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    brick_token.buy(amount, dai.address, {"from": account})
+    old_contract_tokens = brick_token.buyableTokens()
+    old_brick_balance = brick_token.balanceOf(account)
+
+    # Act
+    tx = brick_token.fillUp(amount, brick_token.address, {"from": account})
+
+    # Assert
+    assert brick_token.buyableTokens() == old_contract_tokens + amount
+    assert brick_token.balanceOf(account) == old_brick_balance - amount
+    assert tx.events["FilledUp"]["amount"] == amount
+    assert tx.events["FilledUp"]["token"] == brick_token.address
+
+
+def test_fillUp_fail_token_not_allowed(brick_token, token, amount, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+
+    # Act
+
+    # Assert
+    with brownie.reverts("Cannot fill up reserves with this token"):
+        brick_token.fillUp(amount, token, {"from": account})
+
+
+def test_fillUp_fail_amount_is_not_enought(brick_token, dai, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+
+    # Act
+
+    # Assert
+    with brownie.reverts("Amount must be more than 0 tokens"):
+        brick_token.fillUp(0, dai, {"from": account})
 
 
 # endregion
