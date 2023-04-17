@@ -53,12 +53,12 @@ def token_value(account):
 
 @pytest.fixture
 def brick_token(
-    supply, dai, dai_amount, eth, token_value_DAI, token_value_ETH, account
+    supply, dai, dai_amount, token_value_DAI, eth, eth_amount, token_value_ETH, account
 ):
     bt = BrickToken.deploy(supply, {"from": account})
     bt.approve(bt.address, supply, {"from": account})
     dai.approve(bt.address, dai_amount, {"from": account})
-    eth.approve(bt.address, dai_amount, {"from": account})
+    eth.approve(bt.address, eth_amount, {"from": account})
     bt.addAllowedToken(bt.address, {"from": account})
     bt.addAllowedToken(dai.address, {"from": account})
     bt.addAllowedToken(eth.address, {"from": account})
@@ -87,6 +87,7 @@ def token_value_DAI(DAI_price, decimals, account):
 
 
 # endregion
+
 
 # region WETH
 @pytest.fixture

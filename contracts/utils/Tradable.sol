@@ -87,7 +87,10 @@ abstract contract Tradable is ERC20, ITradable, AllowTokens, TokenValue {
     }
 
     function fillUp(uint256 amount, address token) public {
-        require(isTokenAllowed(token), "Cannot fill up with this token");
+        require(
+            isTokenAllowed(token),
+            "Cannot fill up reserves with this token"
+        );
         require(amount > 0, "Amount must be more than 0 tokens");
 
         if (token == address(this)) {
