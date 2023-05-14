@@ -17,7 +17,9 @@ contract OrderBook {
 
     enum Type {
         Bid,
-        Ask
+        Ask,
+        MarketBuy,
+        MarketSell
     }
 
     enum Status {
@@ -41,80 +43,92 @@ contract OrderBook {
     uint256[] public openBidsStack;
 
     constructor(address _bookToken, address _priceToken) {
+        _id = 1;
         bookToken = _bookToken;
         priceToken = _priceToken;
         marketPrice = 0;
-        _id = 1;
     }
 
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
+        uint256 bestPrice = bestBidPrice();
         require(
-            IERC20(priceToken).balanceOf(msg.sender) >= _amount,
+            // todo this check is not very precise, should consider all involved bids
+            IERC20(priceToken).balanceOf(msg.sender) >= _amount * bestPrice,
             "Insufficient funds"
         );
 
-        uint256 amount = _amount;
-        uint256 i = 0;
-        while (amount > 0 && i < openAsksStack.length) {
-            uint256 price = openAsksStack[i];
-            uint256 j = 0;
-            while (amount > 0 && j < price_openAsks[price].length) {
-                Order memory ask = orderID_order[price_openAsks[price][j]];
-                uint256 toBuy = (amount > ask.amount) ? ask.amount : amount;
-                amount -= toBuy;
-                ask.amount -= toBuy;
-                IERC20(bookToken).transferFrom(ask.maker, msg.sender, toBuy);
-                IERC20(priceToken).transferFrom(
-                    msg.sender,
-                    ask.maker,
-                    toBuy * ask.pricePerUnit
-                );
-                if (ask.amount == 0) {
-                    deleteItem(j, price_openAsks[price]);
-                }
-                j++;
+        orderID_order[_id] = Order(
+            msg.sender,
+            bestPrice,
+            _amount,
+            _amount,
+            Type.MarketBuy,
+            Status.Open,
+            block.timestamp,
+            0
+        );
+
+        Order storage newOrder = orderID_order[_id];
+
+        while (
+            newOrder.status != Status.Filled ||
+            price_openBids[bestPrice].length > 0
+        ) {
+            bestPrice = bestBidPrice();
+            uint256 bestBidId = price_openBids[bestPrice][0];
+            Order storage bestBidOrder = orderID_order[bestBidId];
+
+            matchOrders(bestBidOrder, newOrder);
+
+            //todo try to move this check on function matchOrders()
+            if (orderID_order[bestBidId].status == Status.Filled) {
+                deleteItem(0, price_openBids[bestPrice]);
+                openBidsStack.pop();
             }
-            if (price_openAsks[price].length == 0) {
-                deleteItem(i, openAsksStack);
-            }
-            i++;
         }
+
+        //todo other checks?
     }
 
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
+        uint256 bestPrice = bestAskPrice();
         require(
             IERC20(bookToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
         );
 
-        uint256 amount = _amount;
-        uint256 i = 0;
-        while (amount > 0 && i < openBidsStack.length) {
-            uint256 price = openBidsStack[i];
-            uint256 j = 0;
-            while (amount > 0 && j < price_openBids[price].length) {
-                Order memory bid = orderID_order[price_openBids[price][j]];
-                uint256 toSell = (amount > bid.amount) ? bid.amount : amount;
-                amount -= toSell;
-                bid.amount -= toSell;
-                IERC20(bookToken).transferFrom(msg.sender, bid.maker, toSell);
-                IERC20(priceToken).transferFrom(
-                    bid.maker,
-                    msg.sender,
-                    toSell * bid.pricePerUnit
-                );
-                if (bid.amount == 0) {
-                    deleteItem(j, price_openBids[price]);
-                }
-                j++;
+        orderID_order[_id] = Order(
+            msg.sender,
+            bestPrice,
+            _amount,
+            _amount,
+            Type.MarketSell,
+            Status.Open,
+            block.timestamp,
+            0
+        );
+
+        Order storage newOrder = orderID_order[_id];
+
+        while (
+            newOrder.status != Status.Filled ||
+            price_openAsks[bestPrice].length > 0
+        ) {
+            bestPrice = bestAskPrice();
+            uint256 bestAskId = price_openAsks[bestPrice][0];
+            Order storage bestAskOrder = orderID_order[bestAskId];
+
+            matchOrders(newOrder, bestAskOrder);
+
+            if (orderID_order[bestAskId].status == Status.Filled) {
+                deleteItem(0, price_openAsks[bestPrice]);
+                openAsksStack.pop();
             }
-            if (price_openBids[price].length == 0) {
-                deleteItem(i, openBidsStack);
-            }
-            i++;
         }
+
+        //todo other checks?
     }
 
     function addBid(uint256 _price, uint256 _amount) public {
@@ -139,26 +153,25 @@ contract OrderBook {
         Order storage newOrder = orderID_order[_id];
 
         for (uint256 i = 0; i < price_openAsks[_price].length; i++) {
-            matchOrders(newOrder, orderID_order[price_openAsks[_price][i]]);
-            if (
-                orderID_order[price_openAsks[_price][i]].status == Status.Filled
-            ) {
-                price_openAsks[_price].pop();
+            Order storage bestAsk = orderID_order[price_openAsks[_price][0]];
+            matchOrders(newOrder, bestAsk);
+            if (bestAsk.status == Status.Filled) {
+                deleteItem(0, price_openAsks[_price]);
                 openAsksStack.pop();
             }
-            if (newOrder.status == Status.Filled) break;
+            if (newOrder.status != Status.Open) break;
         }
 
         if (newOrder.status == Status.Open) {
             price_openBids[_price].push(_id);
-            insertBid(_price);
+            insertBidInStack(_price);
         }
 
         user_ordersId[msg.sender] = _id;
         _id++;
     }
 
-    function insertBid(uint256 _price) private {
+    function insertBidInStack(uint256 _price) private {
         uint256 j = openBidsStack.length;
         while (j > 0 && openBidsStack[j - 1] > _price) {
             openBidsStack[j] = openBidsStack[j - 1];
@@ -189,26 +202,25 @@ contract OrderBook {
         Order storage newOrder = orderID_order[_id];
 
         for (uint256 i = 0; i < price_openBids[_price].length; i++) {
-            matchOrders(orderID_order[price_openBids[_price][i]], newOrder);
-            if (
-                orderID_order[price_openBids[_price][i]].status == Status.Filled
-            ) {
-                price_openBids[_price].pop();
+            Order storage bestBid = orderID_order[price_openBids[_price][0]];
+            matchOrders(bestBid, newOrder);
+            if (bestBid.status == Status.Filled) {
+                deleteItem(0, price_openBids[_price]);
                 openBidsStack.pop();
             }
-            if (newOrder.status == Status.Filled) break;
+            if (newOrder.status != Status.Open) break;
         }
 
         if (newOrder.status == Status.Open) {
             price_openAsks[_price].push(_id);
-            insertAsk(_price);
+            insertAskInStack(_price);
         }
 
         user_ordersId[msg.sender] = _id;
         _id++;
     }
 
-    function insertAsk(uint256 _price) private {
+    function insertAskInStack(uint256 _price) private {
         uint256 j = openAsksStack.length;
         while (j > 0 && openAsksStack[j - 1] < _price) {
             openAsksStack[j] = openAsksStack[j - 1];
