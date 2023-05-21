@@ -2,11 +2,13 @@ from web3 import Web3
 import pytest
 from brownie import (
     BrickToken,
+    MockERC20,
     MockDAI,
     MockWETH,
     AllowTokens,
     TokenValue,
     MockV3Aggregator,
+    OrderBook,
 )
 from scripts.utilities import get_account
 
@@ -113,3 +115,30 @@ def token_value_ETH(ETH_price, decimals, account):
 @pytest.fixture
 def token():
     return "0x345f9bFd2468f56CcCCb961c29Cf2a454E0812Cd"
+
+
+# region OrderBook
+@pytest.fixture
+def book_token(supply, account):
+    mock_erc20 = MockERC20.deploy("Book Token", "BOOK", {"from": account})
+    mock_erc20.mint(supply, {"from": account})
+    mock_erc20.approve(mock_erc20.address, supply, {"from": account})
+    return mock_erc20
+
+
+@pytest.fixture
+def price_token(supply, account):
+    mock_erc20 = MockERC20.deploy("Price Token", "PRICE", {"from": account})
+    mock_erc20.mint(supply, {"from": account})
+    return mock_erc20
+
+
+@pytest.fixture
+def order_book(book_token, price_token, supply, account):
+    order_book = OrderBook.deploy(book_token, price_token, {"from": account})
+    book_token.approve(order_book.address, supply, {"from": account})
+    price_token.approve(order_book.address, supply, {"from": account})
+    return order_book
+
+
+# endregion
