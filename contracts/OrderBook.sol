@@ -30,6 +30,8 @@ contract OrderBook {
         Cancelled
     }
 
+    uint256 private constant MAX_UINT = type(uint256).max;
+
     uint256 private _id;
     address public bookToken;
     address public priceToken;
@@ -55,13 +57,12 @@ contract OrderBook {
 
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        uint256 bestPrice = bestBidPrice();
         require(
-            // todo this check is not very precise, should consider all involved bids
-            IERC20(priceToken).balanceOf(msg.sender) >= _amount * bestPrice,
+            IERC20(priceToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
         );
 
+        uint256 bestPrice = bestBidPrice();
         orderID_order[_id] = Order(
             msg.sender,
             bestPrice,
@@ -74,35 +75,36 @@ contract OrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        _id++;
 
-        while (
-            newOrder.status != Status.Filled ||
-            price_openBids[bestPrice].length > 0
-        ) {
-            bestPrice = bestBidPrice();
+        while (newOrder.status != Status.Filled || bestPrice < MAX_UINT) {
             uint256 bestBidId = price_openBids[bestPrice][0];
             Order storage bestBidOrder = orderID_order[bestBidId];
 
             matchOrders(bestBidOrder, newOrder);
 
-            //todo try to move this check on function matchOrders()
-            if (orderID_order[bestBidId].status == Status.Filled) {
+            if (bestBidOrder.status == Status.Filled) {
                 deleteItem(0, price_openBids[bestPrice]);
-                openBidsStack.pop();
+                if (price_openBids[bestPrice].length == 0) {
+                    openBidsStack.pop();
+                    bestPrice = bestBidPrice();
+                }
             }
         }
 
-        //todo other checks?
+        if (newOrder.status == Status.Open) {
+            addAsk(marketPrice, newOrder.amount);
+        }
     }
 
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        uint256 bestPrice = bestAskPrice();
         require(
             IERC20(bookToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
         );
 
+        uint256 bestPrice = bestAskPrice();
         orderID_order[_id] = Order(
             msg.sender,
             bestPrice,
@@ -115,24 +117,26 @@ contract OrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        _id++;
 
-        while (
-            newOrder.status != Status.Filled ||
-            price_openAsks[bestPrice].length > 0
-        ) {
-            bestPrice = bestAskPrice();
+        while (newOrder.status != Status.Filled || bestPrice > 0) {
             uint256 bestAskId = price_openAsks[bestPrice][0];
             Order storage bestAskOrder = orderID_order[bestAskId];
 
             matchOrders(newOrder, bestAskOrder);
 
-            if (orderID_order[bestAskId].status == Status.Filled) {
+            if (bestAskOrder.status == Status.Filled) {
                 deleteItem(0, price_openAsks[bestPrice]);
-                openAsksStack.pop();
+                if (price_openAsks[bestPrice].length == 0) {
+                    openAsksStack.pop();
+                    bestPrice = bestAskPrice();
+                }
             }
         }
 
-        //todo other checks?
+        if (newOrder.status == Status.Open) {
+            addBid(marketPrice, newOrder.amount);
+        }
     }
 
     function addBid(uint256 _price, uint256 _amount) public {
@@ -142,7 +146,7 @@ contract OrderBook {
 
         //todo check if bid price is greater than best ask price
         // in this case, convert to market order to avoid price manipulation
-        // and triggers buy cascade
+        // and to avoid triggers buy cascade
 
         orderID_order[_id] = Order(
             msg.sender,
@@ -199,7 +203,7 @@ contract OrderBook {
 
         //todo check if ask is less than best bid price
         // in this case, convert to market order to avoid price manipulation
-        // and triggers sell cascade
+        // and to avoid triggers sell cascade
 
         orderID_order[_id] = Order(
             msg.sender,
@@ -282,11 +286,15 @@ contract OrderBook {
     }
 
     function bestBidPrice() public view returns (uint256) {
-        return orderID_order[openBidsStack[0]].pricePerUnit;
+        if (openBidsStack.length == 0) return MAX_UINT;
+        return
+            orderID_order[openBidsStack[openBidsStack.length - 1]].pricePerUnit;
     }
 
     function bestAskPrice() public view returns (uint256) {
-        return orderID_order[openAsksStack[0]].pricePerUnit;
+        if (openAsksStack.length == 0) return 0;
+        return
+            orderID_order[openAsksStack[openAsksStack.length - 1]].pricePerUnit;
     }
 
     function cancelOrder(uint256 orderID) external {
