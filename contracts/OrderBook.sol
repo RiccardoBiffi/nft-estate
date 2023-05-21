@@ -30,7 +30,7 @@ contract OrderBook {
         Cancelled
     }
 
-    uint256 private constant MAX_UINT = type(uint256).max;
+    uint256 private constant _MAX_UINT = type(uint256).max;
 
     uint256 private _id;
     address public bookToken;
@@ -77,14 +77,14 @@ contract OrderBook {
         Order storage newOrder = orderID_order[_id];
         _id++;
 
-        while (newOrder.status != Status.Filled || bestPrice < MAX_UINT) {
+        while (newOrder.status != Status.Filled || bestPrice < _MAX_UINT) {
             uint256 bestBidId = price_openBids[bestPrice][0];
             Order storage bestBidOrder = orderID_order[bestBidId];
 
-            matchOrders(bestBidOrder, newOrder);
+            _matchOrders(bestBidOrder, newOrder);
 
             if (bestBidOrder.status == Status.Filled) {
-                deleteItem(0, price_openBids[bestPrice]);
+                _deleteItem(0, price_openBids[bestPrice]);
                 if (price_openBids[bestPrice].length == 0) {
                     openBidsStack.pop();
                     bestPrice = bestBidPrice();
@@ -123,10 +123,10 @@ contract OrderBook {
             uint256 bestAskId = price_openAsks[bestPrice][0];
             Order storage bestAskOrder = orderID_order[bestAskId];
 
-            matchOrders(newOrder, bestAskOrder);
+            _matchOrders(newOrder, bestAskOrder);
 
             if (bestAskOrder.status == Status.Filled) {
-                deleteItem(0, price_openAsks[bestPrice]);
+                _deleteItem(0, price_openAsks[bestPrice]);
                 if (price_openAsks[bestPrice].length == 0) {
                     openAsksStack.pop();
                     bestPrice = bestAskPrice();
@@ -169,9 +169,9 @@ contract OrderBook {
 
         for (uint256 i = 0; i < price_openAsks[_price].length; i++) {
             Order storage bestAsk = orderID_order[price_openAsks[_price][0]];
-            matchOrders(newOrder, bestAsk);
+            _matchOrders(newOrder, bestAsk);
             if (bestAsk.status == Status.Filled) {
-                deleteItem(0, price_openAsks[_price]);
+                _deleteItem(0, price_openAsks[_price]);
                 openAsksStack.pop();
             }
             if (newOrder.status != Status.Open) break;
@@ -179,15 +179,16 @@ contract OrderBook {
 
         if (newOrder.status == Status.Open) {
             price_openBids[_price].push(_id);
-            insertBidInStack(_price);
+            _insertBidInStack(_price);
         }
 
         user_ordersId[msg.sender] = _id;
         _id++;
     }
 
-    function insertBidInStack(uint256 _price) private {
+    function _insertBidInStack(uint256 _price) private {
         uint256 j = openBidsStack.length;
+        openBidsStack.push(_price);
         while (j > 0 && openBidsStack[j - 1] > _price) {
             openBidsStack[j] = openBidsStack[j - 1];
             j--;
@@ -216,18 +217,18 @@ contract OrderBook {
 
         Order storage newOrder = orderID_order[_id];
 
-        priceTokenVault += newOrder.amount * newOrder.pricePerUnit;
+        priceTokenVault += (newOrder.amount * newOrder.pricePerUnit) / 1e18;
         IERC20(priceToken).transferFrom(
             msg.sender,
             address(this),
-            newOrder.amount * newOrder.pricePerUnit
+            (newOrder.amount * newOrder.pricePerUnit) / 1e18
         );
 
         for (uint256 i = 0; i < price_openBids[_price].length; i++) {
             Order storage bestBid = orderID_order[price_openBids[_price][0]];
-            matchOrders(bestBid, newOrder);
+            _matchOrders(bestBid, newOrder);
             if (bestBid.status == Status.Filled) {
-                deleteItem(0, price_openBids[_price]);
+                _deleteItem(0, price_openBids[_price]);
                 openBidsStack.pop();
             }
             if (newOrder.status != Status.Open) break;
@@ -235,15 +236,16 @@ contract OrderBook {
 
         if (newOrder.status == Status.Open) {
             price_openAsks[_price].push(_id);
-            insertAskInStack(_price);
+            _insertAskInStack(_price);
         }
 
         user_ordersId[msg.sender] = _id;
         _id++;
     }
 
-    function insertAskInStack(uint256 _price) private {
+    function _insertAskInStack(uint256 _price) private {
         uint256 j = openAsksStack.length;
+        openAsksStack.push(_price);
         while (j > 0 && openAsksStack[j - 1] < _price) {
             openAsksStack[j] = openAsksStack[j - 1];
             j--;
@@ -251,18 +253,18 @@ contract OrderBook {
         openAsksStack[j] = _price;
     }
 
-    function matchOrders(Order storage bid, Order storage ask) internal {
+    function _matchOrders(Order storage bid, Order storage ask) internal {
         if (bid.amount == ask.amount) {
             // complete match
-            fillOrder(bid);
-            fillOrder(ask);
+            _fillOrder(bid);
+            _fillOrder(ask);
         } else if (bid.amount > ask.amount) {
             // partial match, bid is larger
             bid.amount -= ask.amount;
-            fillOrder(ask);
+            _fillOrder(ask);
         } else {
             // partial match, ask is larger
-            fillOrder(bid);
+            _fillOrder(bid);
             ask.amount -= bid.amount;
         }
 
@@ -273,18 +275,18 @@ contract OrderBook {
         IERC20(priceToken).transferFrom(
             address(this),
             bid.maker,
-            bid.amount * ask.pricePerUnit
+            (bid.amount * ask.pricePerUnit) / 1e18
         );
     }
 
-    function fillOrder(Order storage order) internal {
+    function _fillOrder(Order storage order) internal {
         order.amount = 0;
         order.status = Status.Filled;
         order.timestampClose = block.timestamp;
     }
 
     function bestBidPrice() public view returns (uint256) {
-        if (openBidsStack.length == 0) return MAX_UINT;
+        if (openBidsStack.length == 0) return _MAX_UINT;
         return
             orderID_order[openBidsStack[openBidsStack.length - 1]].pricePerUnit;
     }
@@ -314,13 +316,13 @@ contract OrderBook {
             ];
             for (uint256 i = 0; i < openBids.length; i++) {
                 if (openBids[i] == orderID) {
-                    deleteItem(i, openBids);
+                    _deleteItem(i, openBids);
                     break;
                 }
             }
             for (uint256 i = 0; i < openBidsStack.length; i++) {
                 if (openBidsStack[i] == orderID) {
-                    deleteItem(i, openBidsStack);
+                    _deleteItem(i, openBidsStack);
                     break;
                 }
             }
@@ -337,30 +339,31 @@ contract OrderBook {
             ];
             for (uint256 i = 0; i < openAsks.length; i++) {
                 if (openAsks[i] == orderID) {
-                    deleteItem(i, openAsks);
+                    _deleteItem(i, openAsks);
                     break;
                 }
             }
             for (uint256 i = 0; i < openAsksStack.length; i++) {
                 if (openAsksStack[i] == orderID) {
-                    deleteItem(i, openAsksStack);
+                    _deleteItem(i, openAsksStack);
                     break;
                 }
             }
 
             priceTokenVault -=
-                orderID_order[orderID].amount *
-                orderID_order[orderID].pricePerUnit;
+                (orderID_order[orderID].amount *
+                    orderID_order[orderID].pricePerUnit) /
+                1e18;
             IERC20(priceToken).transferFrom(
                 address(this),
                 orderID_order[orderID].maker,
-                orderID_order[orderID].amount *
-                    orderID_order[orderID].pricePerUnit
+                (orderID_order[orderID].amount *
+                    orderID_order[orderID].pricePerUnit) / 1e18
             );
         }
     }
 
-    function deleteItem(uint256 index, uint256[] storage array) internal {
+    function _deleteItem(uint256 index, uint256[] storage array) internal {
         require(index < array.length, "Index out of bounds");
         for (uint256 i = index; i < array.length - 1; i++) {
             array[i] = array[i + 1];
