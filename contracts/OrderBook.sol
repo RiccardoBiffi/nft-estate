@@ -36,8 +36,8 @@ contract OrderBook {
     address public bookToken;
     address public priceToken;
     uint256 public marketPrice;
-    uint256 public bookTokenVault;
-    uint256 public priceTokenVault;
+    uint256 public bookTokenVault; // todo create a Vault generic contract
+    uint256 public priceTokenVault; // todo create a Vault generic contract
 
     mapping(uint256 => Order) public orderID_order;
     mapping(address => uint256) public user_ordersId;
@@ -142,11 +142,10 @@ contract OrderBook {
     function addBid(uint256 _price, uint256 _amount) public {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
-        // todo require order not to be better than best counter offer, at most equal
-
-        //todo check if bid price is greater than best ask price
-        // in this case, convert to market order to avoid price manipulation
-        // and to avoid triggers buy cascade
+        require(
+            _price >= bestAskPrice(),
+            "Price must be greater or equal than best ask price"
+        );
 
         orderID_order[_id] = Order(
             msg.sender,
@@ -199,11 +198,10 @@ contract OrderBook {
     function addAsk(uint256 _price, uint256 _amount) public {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
-        // todo require order not to be better than best counter offer, at most equal
-
-        //todo check if ask is less than best bid price
-        // in this case, convert to market order to avoid price manipulation
-        // and to avoid triggers sell cascade
+        require(
+            _price <= bestBidPrice(),
+            "Price must be less or equal than best bid price"
+        );
 
         orderID_order[_id] = Order(
             msg.sender,
