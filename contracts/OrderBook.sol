@@ -57,6 +57,7 @@ contract OrderBook {
 
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
+        require(openBidsStack.length > 0, "There are no open bids");
         require(
             IERC20(priceToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
@@ -99,6 +100,7 @@ contract OrderBook {
 
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
+        require(openAsksStack.length > 0, "There are no open asks");
         require(
             IERC20(bookToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
