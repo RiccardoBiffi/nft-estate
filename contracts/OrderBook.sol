@@ -2,10 +2,12 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./interfaces/IOrderBook.sol";
 
 //security avoid reentrancy attacks
+//todo add and test events
 
-contract OrderBook {
+contract OrderBook is IOrderBook {
     struct Order {
         address maker;
         uint256 pricePerUnit;
@@ -40,7 +42,7 @@ contract OrderBook {
     uint256 public priceTokenVault; // todo create a Vault generic contract
 
     mapping(uint256 => Order) public orderID_order;
-    mapping(address => uint256) public user_ordersId;
+    mapping(address => uint256[]) public user_ordersId;
     mapping(uint256 => uint256[]) public price_openAsks; // asks ordered by time
     mapping(uint256 => uint256[]) public price_openBids; // bids ordered by time
     // stack of all open asks ordered by pricePerUnit asc, [length-1] is the best
@@ -58,12 +60,9 @@ contract OrderBook {
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
         require(openBidsStack.length > 0, "There are no open bids");
-        require(
-            IERC20(priceToken).balanceOf(msg.sender) >= _amount,
-            "Insufficient funds"
-        );
 
         uint256 bestPrice = bestBidPrice();
+
         orderID_order[_id] = Order(
             msg.sender,
             bestPrice,
@@ -184,18 +183,20 @@ contract OrderBook {
             _insertBidInStack(_price);
         }
 
-        user_ordersId[msg.sender] = _id;
+        user_ordersId[msg.sender].push(_id);
         _id++;
     }
 
     function _insertBidInStack(uint256 _price) private {
-        uint256 j = openBidsStack.length;
-        openBidsStack.push(_price);
-        while (j > 0 && openBidsStack[j - 1] > _price) {
-            openBidsStack[j] = openBidsStack[j - 1];
-            j--;
+        if (price_openBids[_price].length == 1) {
+            uint256 j = openBidsStack.length;
+            openBidsStack.push(_price);
+            while (j > 0 && openBidsStack[j - 1] > _price) {
+                openBidsStack[j] = openBidsStack[j - 1];
+                j--;
+            }
+            openBidsStack[j] = _price;
         }
-        openBidsStack[j] = _price;
     }
 
     function addAsk(uint256 _price, uint256 _amount) public {
@@ -241,44 +242,74 @@ contract OrderBook {
             _insertAskInStack(_price);
         }
 
-        user_ordersId[msg.sender] = _id;
+        user_ordersId[msg.sender].push(_id);
         _id++;
     }
 
     function _insertAskInStack(uint256 _price) private {
-        uint256 j = openAsksStack.length;
-        openAsksStack.push(_price);
-        while (j > 0 && openAsksStack[j - 1] < _price) {
-            openAsksStack[j] = openAsksStack[j - 1];
-            j--;
+        if (price_openAsks[_price].length == 1) {
+            uint256 j = openAsksStack.length;
+            openAsksStack.push(_price);
+            while (j > 0 && openAsksStack[j - 1] < _price) {
+                openAsksStack[j] = openAsksStack[j - 1];
+                j--;
+            }
+            openAsksStack[j] = _price;
         }
-        openAsksStack[j] = _price;
     }
 
     function _matchOrders(Order storage bid, Order storage ask) internal {
+        uint256 matchedBookTokens = 0;
+
         if (bid.amount == ask.amount) {
             // complete match
+            matchedBookTokens = bid.amount;
             _fillOrder(bid);
             _fillOrder(ask);
         } else if (bid.amount > ask.amount) {
             // partial match, bid is larger
+            matchedBookTokens = ask.amount;
             bid.amount -= ask.amount;
             _fillOrder(ask);
         } else {
             // partial match, ask is larger
-            _fillOrder(bid);
+            matchedBookTokens = bid.amount;
             ask.amount -= bid.amount;
+            _fillOrder(bid);
         }
 
+        if (ask.orderType == Type.MarketBuy) {
+            bookTokenVault -= matchedBookTokens;
+
+            IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
+            IERC20(priceToken).transferFrom(
+                ask.maker,
+                bid.maker,
+                (matchedBookTokens * ask.pricePerUnit) / 1e18
+            );
+        } else if (bid.orderType == Type.MarketSell) {
+            priceTokenVault -= (matchedBookTokens * ask.pricePerUnit) / 1e18;
+
+            IERC20(bookToken).transferFrom(
+                bid.maker,
+                ask.maker,
+                matchedBookTokens
+            );
+            IERC20(priceToken).transfer(
+                bid.maker,
+                (matchedBookTokens * ask.pricePerUnit) / 1e18
+            );
+        } else {
+            bookTokenVault -= matchedBookTokens;
+            priceTokenVault -= (matchedBookTokens * ask.pricePerUnit) / 1e18;
+
+            IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
+            IERC20(priceToken).transfer(
+                bid.maker,
+                (matchedBookTokens * ask.pricePerUnit) / 1e18
+            );
+        }
         marketPrice = ask.pricePerUnit;
-        bookTokenVault -= ask.amount;
-        priceTokenVault -= ask.amount * ask.pricePerUnit;
-        IERC20(bookToken).transferFrom(address(this), ask.maker, ask.amount);
-        IERC20(priceToken).transferFrom(
-            address(this),
-            bid.maker,
-            (bid.amount * ask.pricePerUnit) / 1e18
-        );
     }
 
     function _fillOrder(Order storage order) internal {
@@ -289,14 +320,12 @@ contract OrderBook {
 
     function bestBidPrice() public view returns (uint256) {
         if (openBidsStack.length == 0) return _MAX_UINT;
-        return
-            orderID_order[openBidsStack[openBidsStack.length - 1]].pricePerUnit;
+        return openBidsStack[openBidsStack.length - 1];
     }
 
     function bestAskPrice() public view returns (uint256) {
         if (openAsksStack.length == 0) return 0;
-        return
-            orderID_order[openAsksStack[openAsksStack.length - 1]].pricePerUnit;
+        return openAsksStack[openAsksStack.length - 1];
     }
 
     function cancelOrder(uint256 orderID) external {
