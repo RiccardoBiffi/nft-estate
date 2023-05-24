@@ -6,6 +6,9 @@ import "./interfaces/IOrderBook.sol";
 
 //security avoid reentrancy attacks
 //todo add and test events
+//todo review ask and bid logic after meaning fix
+//ask: io, per questa cosa che ho e voglio vendere, ti chiedo 0,5 l'uno (+ è meglio)
+//bid: io, per questa cosa che tu hai e voglio acquistare, ti offro 0,5 l'uno (- è meglio)
 
 contract OrderBook is IOrderBook {
     struct Order {
@@ -43,7 +46,9 @@ contract OrderBook is IOrderBook {
 
     mapping(uint256 => Order) public orderID_order;
     mapping(address => uint256[]) public user_ordersId;
+    //todo make private
     mapping(uint256 => uint256[]) public price_openAsks; // asks ordered by time
+    //todo make private
     mapping(uint256 => uint256[]) public price_openBids; // bids ordered by time
     // stack of all open asks ordered by pricePerUnit asc, [length-1] is the best
     uint256[] public openAsksStack;
@@ -144,8 +149,8 @@ contract OrderBook is IOrderBook {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
         require(
-            _price >= bestAskPrice(),
-            "Price must be greater or equal than best ask price"
+            _price <= bestAskPrice(),
+            "Price must be less or equal than best ask price"
         );
 
         orderID_order[_id] = Order(
@@ -160,22 +165,22 @@ contract OrderBook is IOrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        user_ordersId[msg.sender].push(_id);
 
-        bookTokenVault += newOrder.amount;
-        IERC20(bookToken).transferFrom(
+        priceTokenVault += (newOrder.amount * newOrder.pricePerUnit) / 1e18;
+        IERC20(priceToken).transferFrom(
             msg.sender,
             address(this),
-            newOrder.amount
+            (newOrder.amount * newOrder.pricePerUnit) / 1e18
         );
 
-        for (uint256 i = 0; i < price_openAsks[_price].length; i++) {
-            Order storage bestAsk = orderID_order[price_openAsks[_price][0]];
+        uint256 i = 0;
+        while (
+            newOrder.status == Status.Open && i < price_openAsks[_price].length
+        ) {
+            Order storage bestAsk = orderID_order[price_openAsks[_price][i]];
             _matchOrders(newOrder, bestAsk);
-            if (bestAsk.status == Status.Filled) {
-                _deleteItem(0, price_openAsks[_price]);
-                openAsksStack.pop();
-            }
-            if (newOrder.status != Status.Open) break;
+            i++;
         }
 
         if (newOrder.status == Status.Open) {
@@ -183,7 +188,18 @@ contract OrderBook is IOrderBook {
             _insertBidInStack(_price);
         }
 
-        user_ordersId[msg.sender].push(_id);
+        if (i == 0) return;
+
+        if (
+            orderID_order[price_openAsks[_price][i - 1]].status == Status.Filled
+        ) {
+            price_openAsks[_price] = _skip(price_openAsks[_price], i);
+        } else {
+            price_openAsks[_price] = _skip(price_openAsks[_price], i - 1);
+        }
+
+        if (price_openAsks[_price].length == 0) openAsksStack.pop();
+
         _id++;
     }
 
@@ -203,8 +219,8 @@ contract OrderBook is IOrderBook {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
         require(
-            _price <= bestBidPrice(),
-            "Price must be less or equal than best bid price"
+            _price >= bestBidPrice(),
+            "Price must be greater or equal than best bid price"
         );
 
         orderID_order[_id] = Order(
@@ -219,22 +235,22 @@ contract OrderBook is IOrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        user_ordersId[msg.sender].push(_id);
 
-        priceTokenVault += (newOrder.amount * newOrder.pricePerUnit) / 1e18;
-        IERC20(priceToken).transferFrom(
+        bookTokenVault += newOrder.amount;
+        IERC20(bookToken).transferFrom(
             msg.sender,
             address(this),
-            (newOrder.amount * newOrder.pricePerUnit) / 1e18
+            newOrder.amount
         );
 
-        for (uint256 i = 0; i < price_openBids[_price].length; i++) {
-            Order storage bestBid = orderID_order[price_openBids[_price][0]];
+        uint256 i = 0;
+        while (
+            newOrder.status == Status.Open && i < price_openBids[_price].length
+        ) {
+            Order storage bestBid = orderID_order[price_openBids[_price][i]];
             _matchOrders(bestBid, newOrder);
-            if (bestBid.status == Status.Filled) {
-                _deleteItem(0, price_openBids[_price]);
-                openBidsStack.pop();
-            }
-            if (newOrder.status != Status.Open) break;
+            i++;
         }
 
         if (newOrder.status == Status.Open) {
@@ -242,7 +258,18 @@ contract OrderBook is IOrderBook {
             _insertAskInStack(_price);
         }
 
-        user_ordersId[msg.sender].push(_id);
+        if (i == 0) return;
+
+        if (
+            orderID_order[price_openBids[_price][i - 1]].status == Status.Filled
+        ) {
+            price_openBids[_price] = _skip(price_openBids[_price], i);
+        } else {
+            price_openBids[_price] = _skip(price_openBids[_price], i - 1);
+        }
+
+        if (price_openBids[_price].length == 0) openBidsStack.pop();
+
         _id++;
     }
 
@@ -392,6 +419,23 @@ contract OrderBook is IOrderBook {
                     orderID_order[orderID].pricePerUnit) / 1e18
             );
         }
+    }
+
+    function _skip(
+        uint256[] memory array,
+        uint256 n
+    ) private pure returns (uint256[] memory) {
+        require(
+            n <= array.length,
+            "Cannot skip more elements than the array length"
+        );
+        if (n == 0) return array;
+
+        uint[] memory result = new uint[](array.length - n);
+        for (uint i = n; i < array.length; i++) {
+            result[i - n] = array[i];
+        }
+        return result;
     }
 
     function _deleteItem(uint256 index, uint256[] storage array) internal {
