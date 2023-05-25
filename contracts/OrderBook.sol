@@ -6,6 +6,7 @@ import "./interfaces/IOrderBook.sol";
 
 //security avoid reentrancy attacks
 //todo add and test events
+
 //todo review ask and bid logic after meaning fix
 //ask: io, per questa cosa che ho e voglio vendere, ti chiedo 0,5 l'uno (+ è meglio)
 //bid: io, per questa cosa che tu hai e voglio acquistare, ti offro 0,5 l'uno (- è meglio)
@@ -41,14 +42,12 @@ contract OrderBook is IOrderBook {
     address public bookToken;
     address public priceToken;
     uint256 public marketPrice;
-    uint256 public bookTokenVault; // todo create a Vault generic contract
-    uint256 public priceTokenVault; // todo create a Vault generic contract
 
     mapping(uint256 => Order) public orderID_order;
     mapping(address => uint256[]) public user_ordersId;
-    //todo make private
+    //todo make private after testing
     mapping(uint256 => uint256[]) public price_openAsks; // asks ordered by time
-    //todo make private
+    //todo make private after testing
     mapping(uint256 => uint256[]) public price_openBids; // bids ordered by time
     // stack of all open asks ordered by pricePerUnit asc, [length-1] is the best
     uint256[] public openAsksStack;
@@ -167,7 +166,6 @@ contract OrderBook is IOrderBook {
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
 
-        priceTokenVault += (newOrder.amount * newOrder.pricePerUnit) / 1e18;
         IERC20(priceToken).transferFrom(
             msg.sender,
             address(this),
@@ -188,19 +186,16 @@ contract OrderBook is IOrderBook {
             _insertBidInStack(_price);
         }
 
+        _id++;
+
         if (i == 0) return;
 
-        if (
-            orderID_order[price_openAsks[_price][i - 1]].status == Status.Filled
-        ) {
-            price_openAsks[_price] = _skip(price_openAsks[_price], i);
-        } else {
-            price_openAsks[_price] = _skip(price_openAsks[_price], i - 1);
-        }
+        price_openAsks[_price] = orderID_order[price_openAsks[_price][i - 1]]
+            .status == Status.Filled
+            ? _skip(price_openAsks[_price], i)
+            : _skip(price_openAsks[_price], i - 1);
 
         if (price_openAsks[_price].length == 0) openAsksStack.pop();
-
-        _id++;
     }
 
     function _insertBidInStack(uint256 _price) private {
@@ -237,7 +232,6 @@ contract OrderBook is IOrderBook {
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
 
-        bookTokenVault += newOrder.amount;
         IERC20(bookToken).transferFrom(
             msg.sender,
             address(this),
@@ -258,19 +252,16 @@ contract OrderBook is IOrderBook {
             _insertAskInStack(_price);
         }
 
+        _id++;
+
         if (i == 0) return;
 
-        if (
-            orderID_order[price_openBids[_price][i - 1]].status == Status.Filled
-        ) {
-            price_openBids[_price] = _skip(price_openBids[_price], i);
-        } else {
-            price_openBids[_price] = _skip(price_openBids[_price], i - 1);
-        }
+        price_openBids[_price] = orderID_order[price_openBids[_price][i - 1]]
+            .status == Status.Filled
+            ? _skip(price_openBids[_price], i)
+            : _skip(price_openBids[_price], i - 1);
 
         if (price_openBids[_price].length == 0) openBidsStack.pop();
-
-        _id++;
     }
 
     function _insertAskInStack(uint256 _price) private {
@@ -305,9 +296,8 @@ contract OrderBook is IOrderBook {
             _fillOrder(bid);
         }
 
+        // todo check ask and bid logic
         if (ask.orderType == Type.MarketBuy) {
-            bookTokenVault -= matchedBookTokens;
-
             IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
             IERC20(priceToken).transferFrom(
                 ask.maker,
@@ -315,8 +305,6 @@ contract OrderBook is IOrderBook {
                 (matchedBookTokens * ask.pricePerUnit) / 1e18
             );
         } else if (bid.orderType == Type.MarketSell) {
-            priceTokenVault -= (matchedBookTokens * ask.pricePerUnit) / 1e18;
-
             IERC20(bookToken).transferFrom(
                 bid.maker,
                 ask.maker,
@@ -327,12 +315,9 @@ contract OrderBook is IOrderBook {
                 (matchedBookTokens * ask.pricePerUnit) / 1e18
             );
         } else {
-            bookTokenVault -= matchedBookTokens;
-            priceTokenVault -= (matchedBookTokens * ask.pricePerUnit) / 1e18;
-
-            IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
+            IERC20(bookToken).transfer(bid.maker, matchedBookTokens);
             IERC20(priceToken).transfer(
-                bid.maker,
+                ask.maker,
                 (matchedBookTokens * ask.pricePerUnit) / 1e18
             );
         }
@@ -346,12 +331,12 @@ contract OrderBook is IOrderBook {
     }
 
     function bestBidPrice() public view returns (uint256) {
-        if (openBidsStack.length == 0) return _MAX_UINT;
+        if (openBidsStack.length == 0) return 0;
         return openBidsStack[openBidsStack.length - 1];
     }
 
     function bestAskPrice() public view returns (uint256) {
-        if (openAsksStack.length == 0) return 0;
+        if (openAsksStack.length == 0) return _MAX_UINT;
         return openAsksStack[openAsksStack.length - 1];
     }
 
@@ -385,7 +370,6 @@ contract OrderBook is IOrderBook {
                 }
             }
 
-            bookTokenVault -= orderID_order[orderID].amount;
             IERC20(bookToken).transferFrom(
                 address(this),
                 orderID_order[orderID].maker,
@@ -408,10 +392,6 @@ contract OrderBook is IOrderBook {
                 }
             }
 
-            priceTokenVault -=
-                (orderID_order[orderID].amount *
-                    orderID_order[orderID].pricePerUnit) /
-                1e18;
             IERC20(priceToken).transferFrom(
                 address(this),
                 orderID_order[orderID].maker,

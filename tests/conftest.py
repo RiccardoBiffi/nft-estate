@@ -121,7 +121,7 @@ def token():
 @pytest.fixture
 def book_token(supply, account):
     mock_erc20 = MockERC20.deploy("Book Token", "BOOK", {"from": account})
-    mock_erc20.mint(supply, {"from": account})
+    mock_erc20.mint(account, supply, {"from": account})
     mock_erc20.approve(mock_erc20.address, supply, {"from": account})
     return mock_erc20
 
@@ -129,7 +129,7 @@ def book_token(supply, account):
 @pytest.fixture
 def price_token(supply, account):
     mock_erc20 = MockERC20.deploy("Price Token", "PRICE", {"from": account})
-    mock_erc20.mint(supply, {"from": account})
+    mock_erc20.mint(account, supply, {"from": account})
     return mock_erc20
 
 

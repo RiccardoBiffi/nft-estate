@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract MockERC20 is ERC20 {
     constructor(string memory name, string memory ticker) ERC20(name, ticker) {}
 
-    function mint(uint256 amount) public {
-        _mint(msg.sender, amount);
+    function mint(address account, uint256 amount) public {
+        _mint(account, amount);
     }
 }
