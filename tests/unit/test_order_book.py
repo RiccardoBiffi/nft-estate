@@ -678,41 +678,403 @@ def test_addAsk_success_multiple_different_price(
     assert order_book.bestAskPrice() == price1
 
 
-def test_addAsk_success_match_complete(order_book, book_token, supply, account):
+def test_addAsk_success_match_complete(
+    order_book, book_token, price_token, supply, account
+):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
     # Arrange
-    bid = 10 * 10**18
+    bidder = get_account(index=1)
     price = 1 * 10**18
 
-    # todo match complete
+    bid = 10 * 10**18
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    ask = 10 * 10**18
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(2) == (
+        account.address,
+        price,
+        ask,
+        0,
+        1,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert book_token.balanceOf(order_book) == 0
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + bid
+    assert price_token.balanceOf(order_book) == 0
+    assert price_token.balanceOf(account) == supply + ask * price // 10**18
+    assert price_token.balanceOf(bidder) == supply - bid * price // 10**18
+    assert order_book.marketPrice() == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openBids(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openBidsStack(0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openAsks(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openAsksStack(0)
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(account, 0) == 2
 
 
-def test_addAsk_success_match_partial_bid(order_book, book_token, supply, account):
+def test_addAsk_success_match_partial_bid(
+    order_book, book_token, price_token, supply, account
+):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
     # Arrange
-    bid = 10 * 10**18
+    bidder = get_account(index=1)
     price = 1 * 10**18
 
-    # todo match partial
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+
+    bid = 10 * 10**18
+    ask = 7 * 10**18
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        3 * 10**18,
+        0,
+        0,
+        web3.eth.get_block("latest").timestamp,
+        0,
+    )
+    assert order_book.orderID_order(2) == (
+        account.address,
+        price,
+        ask,
+        0,
+        1,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert book_token.balanceOf(order_book) == 0
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + ask
+    assert price_token.balanceOf(order_book) == price * (bid - ask) // 10**18
+    assert price_token.balanceOf(account) == supply + ((ask * price) // 10**18)
+    assert price_token.balanceOf(bidder) == supply - ((bid * price) // 10**18)
+    assert order_book.marketPrice() == price
+    assert order_book.price_openBids(price, 0) == 1
+    assert order_book.openBidsStack(0) == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openAsks(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openAsksStack(0)
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(account, 0) == 2
 
 
-def test_addAsk_success_match_partial_ask(order_book, book_token, supply, account):
+def test_addAsk_success_match_partial_ask(
+    order_book, book_token, price_token, supply, account
+):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
         pytest.skip("Only for local testing")
 
     # Arrange
-    bid = 10 * 10**18
+    bidder = get_account(index=1)
     price = 1 * 10**18
 
-    # todo match partial
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+
+    bid = 7 * 10**18
+    ask = 10 * 10**18
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(2) == (
+        account.address,
+        price,
+        ask,
+        3 * 10**18,
+        1,
+        0,
+        web3.eth.get_block("latest").timestamp,
+        0,
+    )
+    assert book_token.balanceOf(order_book) == ask - bid
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + bid
+    assert price_token.balanceOf(order_book) == 0
+    assert price_token.balanceOf(account) == supply + ((bid * price) // 10**18)
+    assert price_token.balanceOf(bidder) == supply - ((bid * price) // 10**18)
+    assert order_book.marketPrice() == price
+    assert order_book.price_openAsks(price, 0) == 2
+    assert order_book.openAsksStack(0) == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openBids(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openBidsStack(0)
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(account, 0) == 2
 
 
-# todo test_addAsk_success_match_multiple_bid_same_price
-# todo test_addAsk_success_match_multiple_bid_different_price
+def test_addAsk_success_match_multiple_bid_same_price_complete(
+    order_book, book_token, price_token, supply, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bidder = get_account(index=1)
+    price = 1 * 10**18
+
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+
+    bid = 10 * 10**18
+    ask = 20 * 10**18
+    tx = order_book.addBid(price, bid, {"from": bidder})
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(2) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(3) == (
+        account.address,
+        price,
+        ask,
+        0,
+        1,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert book_token.balanceOf(order_book) == 0
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + ask
+    assert price_token.balanceOf(order_book) == 0
+    assert price_token.balanceOf(account) == supply + ((2 * bid * price) // 10**18)
+    assert price_token.balanceOf(bidder) == supply - ((2 * bid * price) // 10**18)
+    assert order_book.marketPrice() == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openAsks(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openAsksStack(0) == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openBids(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openBidsStack(0)
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(bidder, 1) == 2
+    assert order_book.user_ordersId(account, 0) == 3
+
+
+def test_addAsk_success_match_multiple_bid_different_price_partial_bid(
+    order_book, book_token, price_token, supply, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bidder = get_account(index=1)
+    price = 1 * 10**18
+
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+
+    bid = 10 * 10**18
+    ask = 15 * 10**18
+    tx = order_book.addBid(price, bid, {"from": bidder})
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(2) == (
+        bidder.address,
+        price,
+        bid,
+        5 * 10**18,
+        0,
+        0,
+        web3.eth.get_block("latest").timestamp,
+        0,
+    )
+    assert order_book.orderID_order(3) == (
+        account.address,
+        price,
+        ask,
+        0,
+        1,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert book_token.balanceOf(order_book) == 0
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + ask
+    assert price_token.balanceOf(order_book) == 5 * 10**18
+    assert price_token.balanceOf(account) == supply + ((ask * price) // 10**18)
+    assert price_token.balanceOf(bidder) == supply - ((2 * bid * price) // 10**18)
+    assert order_book.marketPrice() == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openAsks(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openAsksStack(0) == price
+    assert order_book.price_openBids(price, 0) == 2
+    assert order_book.openBidsStack(0) == price
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(bidder, 1) == 2
+    assert order_book.user_ordersId(account, 0) == 3
+
+
+def test_addAsk_success_match_multiple_bid_different_price_partial_ask(
+    order_book, book_token, price_token, supply, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bidder = get_account(index=1)
+    price = 1 * 10**18
+
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
+    price_token.mint(bidder, supply, {"from": bidder})
+    price_token.approve(order_book, supply, {"from": bidder})
+
+    bid = 10 * 10**18
+    ask = 25 * 10**18
+    tx = order_book.addBid(price, bid, {"from": bidder})
+    tx = order_book.addBid(price, bid, {"from": bidder})
+
+    # Act
+    tx = order_book.addAsk(price, ask, {"from": account})
+
+    # Assert
+    assert order_book.orderID_order(1) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(2) == (
+        bidder.address,
+        price,
+        bid,
+        0,
+        0,
+        1,
+        web3.eth.get_block("latest").timestamp,
+        web3.eth.get_block("latest").timestamp,
+    )
+    assert order_book.orderID_order(3) == (
+        account.address,
+        price,
+        ask,
+        5 * 10**18,
+        1,
+        0,
+        web3.eth.get_block("latest").timestamp,
+        0,
+    )
+    assert book_token.balanceOf(order_book) == 5 * 10**18
+    assert book_token.balanceOf(account) == supply - ask
+    assert book_token.balanceOf(bidder) == supply + bid * 2
+    assert price_token.balanceOf(order_book) == 0
+    assert price_token.balanceOf(account) == supply + ((2 * bid * price) // 10**18)
+    assert price_token.balanceOf(bidder) == supply - ((2 * bid * price) // 10**18)
+    assert order_book.marketPrice() == price
+    assert order_book.price_openAsks(price, 0) == 3
+    assert order_book.openAsksStack(0) == price
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.price_openBids(price, 0)
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.openBidsStack(0)
+    assert order_book.user_ordersId(bidder, 0) == 1
+    assert order_book.user_ordersId(bidder, 1) == 2
+    assert order_book.user_ordersId(account, 0) == 3
 
 
 def test_addAsk_fail_price_zero(order_book, account):
@@ -765,7 +1127,7 @@ def test_addAsk_fail_lower_than_best_bid_price(order_book, account):
 
 
 # region marketBuy
-def test_marketBuy_success_single_bid_complete(
+def test_marketBuy_success_single_ask_complete(
     order_book, book_token, price_token, supply, account
 ):
     if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
@@ -774,10 +1136,10 @@ def test_marketBuy_success_single_bid_complete(
     # Arrange
     bidder = get_account(index=1)
     bid = 10 * 10**18
-    book_token.mint(bidder, bid, {"from": bidder})
-    book_token.approve(order_book, bid, {"from": bidder})
+    book_token.mint(bidder, supply, {"from": bidder})
+    book_token.approve(order_book, supply, {"from": bidder})
     price = 1 * 10**18
-    order_book.addBid(price, bid, {"from": bidder})
+    order_book.addAsk(price, bid, {"from": bidder})
     buy_amount = price * bid // 10**18
 
     # Act

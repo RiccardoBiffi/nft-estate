@@ -63,9 +63,9 @@ contract OrderBook is IOrderBook {
 
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        require(openBidsStack.length > 0, "There are no open bids");
+        require(openAsksStack.length > 0, "There are no open asks");
 
-        uint256 bestPrice = bestBidPrice();
+        uint256 bestPrice = bestAskPrice();
 
         orderID_order[_id] = Order(
             msg.sender,
@@ -91,7 +91,7 @@ contract OrderBook is IOrderBook {
                 _deleteItem(0, price_openBids[bestPrice]);
                 if (price_openBids[bestPrice].length == 0) {
                     openBidsStack.pop();
-                    bestPrice = bestBidPrice();
+                    bestPrice = bestAskPrice();
                 }
             }
         }
@@ -103,13 +103,13 @@ contract OrderBook is IOrderBook {
 
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        require(openAsksStack.length > 0, "There are no open asks");
+        require(openBidsStack.length > 0, "There are no open bids");
         require(
             IERC20(bookToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
         );
 
-        uint256 bestPrice = bestAskPrice();
+        uint256 bestPrice = bestBidPrice();
         orderID_order[_id] = Order(
             msg.sender,
             bestPrice,
@@ -134,7 +134,7 @@ contract OrderBook is IOrderBook {
                 _deleteItem(0, price_openAsks[bestPrice]);
                 if (price_openAsks[bestPrice].length == 0) {
                     openAsksStack.pop();
-                    bestPrice = bestAskPrice();
+                    bestPrice = bestBidPrice();
                 }
             }
         }
@@ -296,7 +296,6 @@ contract OrderBook is IOrderBook {
             _fillOrder(bid);
         }
 
-        // todo check ask and bid logic
         if (ask.orderType == Type.MarketBuy) {
             IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
             IERC20(priceToken).transferFrom(
