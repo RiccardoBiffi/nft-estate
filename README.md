@@ -17,4 +17,7 @@ The owner is a public address managed with a multi-signature wallet that can.
   - change the sell price of $BRICK
 
 ## Protocol token
-The $BRICK token mainly rappresents a share of the Coincrete company. 
+The $BRICK token mainly rappresents a share of the Coincrete company.
+
+# Roadmap
+- change the order book to accepr STOP LIMIT orders, that are orders that are inserted into the order book only when the price reaches a certain value. This can be done by creating an array of StopLimitOrder prices and then, during a market order, when the price reaches the stop price, the order is inserted into the order book in the price queue.

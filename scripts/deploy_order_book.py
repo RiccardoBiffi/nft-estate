@@ -8,6 +8,8 @@ from scripts.utilities import (
     get_account,
 )
 
+CARLO_ADDRESS = "0x12540A0801d50AF38E10cbf00094c59AEdf632B5"
+
 
 def deploy_order_book():
     account = get_account()
@@ -20,7 +22,7 @@ def deploy_order_book():
     )
     book_token.mint(account, 1000000 * 10**18, {"from": account})
     book_token.mint(
-        "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
+        CARLO_ADDRESS,
         1000000 * 10**18,
         {"from": account},
     )
@@ -32,7 +34,7 @@ def deploy_order_book():
     )
     price_token.mint(account, 1000000 * 10**18, {"from": account})
     price_token.mint(
-        "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
+        CARLO_ADDRESS,
         1000000 * 10**18,
         {"from": account},
     )
