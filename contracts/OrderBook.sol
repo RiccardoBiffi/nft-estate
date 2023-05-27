@@ -127,7 +127,16 @@ contract OrderBook is IOrderBook {
             uint256 remainder = newOrder.amount;
             _fillOrder(newOrder);
             newOrder.amount = remainder;
-            addBid(marketPrice, remainder);
+            _addLimitOrder(
+                marketPrice,
+                remainder,
+                Type.Bid,
+                priceToken,
+                price_openBids,
+                price_openAsks,
+                openBidsStack,
+                openAsksStack
+            );
         }
     }
 
@@ -200,11 +209,20 @@ contract OrderBook is IOrderBook {
             uint256 remainder = newOrder.amount;
             _fillOrder(newOrder);
             newOrder.amount = remainder;
-            addAsk(marketPrice, remainder);
+            _addLimitOrder(
+                marketPrice,
+                remainder,
+                Type.Ask,
+                bookToken,
+                price_openAsks,
+                price_openBids,
+                openAsksStack,
+                openBidsStack
+            );
         }
     }
 
-    function addBid(uint256 _price, uint256 _amount) public {
+    function addBid(uint256 _price, uint256 _amount) external {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
         require(
@@ -212,65 +230,19 @@ contract OrderBook is IOrderBook {
             "Price must be less or equal than best ask price"
         );
 
-        orderID_order[_id] = Order(
-            msg.sender,
+        _addLimitOrder(
             _price,
             _amount,
-            _amount,
             Type.Bid,
-            Status.Open,
-            block.timestamp,
-            0
+            priceToken,
+            price_openBids,
+            price_openAsks,
+            openBidsStack,
+            openAsksStack
         );
-
-        Order storage newOrder = orderID_order[_id];
-        user_ordersId[msg.sender].push(_id);
-
-        IERC20(priceToken).transferFrom(
-            msg.sender,
-            address(this),
-            (newOrder.amount * newOrder.pricePerUnit) / 1e18
-        );
-
-        uint256 i = 0;
-        while (
-            newOrder.status == Status.Open && i < price_openAsks[_price].length
-        ) {
-            Order storage bestAsk = orderID_order[price_openAsks[_price][i]];
-            _matchOrders(newOrder, bestAsk);
-            i++;
-        }
-
-        if (newOrder.status == Status.Open) {
-            price_openBids[_price].push(_id);
-            _insertBidInStack(_price);
-        }
-
-        _id++;
-
-        if (i == 0) return;
-
-        price_openAsks[_price] = orderID_order[price_openAsks[_price][i - 1]]
-            .status == Status.Filled
-            ? _skip(price_openAsks[_price], i)
-            : _skip(price_openAsks[_price], i - 1);
-
-        if (price_openAsks[_price].length == 0) openAsksStack.pop();
     }
 
-    function _insertBidInStack(uint256 _price) private {
-        if (price_openBids[_price].length == 1) {
-            uint256 j = openBidsStack.length;
-            openBidsStack.push(_price);
-            while (j > 0 && openBidsStack[j - 1] > _price) {
-                openBidsStack[j] = openBidsStack[j - 1];
-                j--;
-            }
-            openBidsStack[j] = _price;
-        }
-    }
-
-    function addAsk(uint256 _price, uint256 _amount) public {
+    function addAsk(uint256 _price, uint256 _amount) external {
         require(_price > 0, "Price must be greater than zero");
         require(_amount > 0, "Amount must be greater than zero");
         require(
@@ -278,12 +250,34 @@ contract OrderBook is IOrderBook {
             "Price must be greater or equal than best bid price"
         );
 
-        orderID_order[_id] = Order(
-            msg.sender,
+        _addLimitOrder(
             _price,
             _amount,
-            _amount,
             Type.Ask,
+            bookToken,
+            price_openAsks,
+            price_openBids,
+            openAsksStack,
+            openBidsStack
+        );
+    }
+
+    function _addLimitOrder(
+        uint256 price,
+        uint256 amount,
+        Type orderType,
+        address token,
+        mapping(uint256 => uint256[]) storage openOrders,
+        mapping(uint256 => uint256[]) storage antagonistOpenOrders,
+        uint256[] storage openOrdersStack,
+        uint256[] storage antagonistOpenOrdersStack
+    ) internal {
+        orderID_order[_id] = Order(
+            msg.sender,
+            price,
+            amount,
+            amount,
+            orderType,
             Status.Open,
             block.timestamp,
             0
@@ -292,47 +286,66 @@ contract OrderBook is IOrderBook {
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
 
-        IERC20(bookToken).transferFrom(
-            msg.sender,
-            address(this),
-            newOrder.amount
-        );
+        uint256 transferAmount = orderType == Type.Bid
+            ? (amount * price) / 1e18
+            : amount;
+        IERC20(token).transferFrom(msg.sender, address(this), transferAmount);
 
         uint256 i = 0;
         while (
-            newOrder.status == Status.Open && i < price_openBids[_price].length
+            newOrder.status == Status.Open &&
+            i < antagonistOpenOrders[price].length
         ) {
-            Order storage bestBid = orderID_order[price_openBids[_price][i]];
-            _matchOrders(bestBid, newOrder);
+            Order storage bestOrder = orderID_order[
+                antagonistOpenOrders[price][i]
+            ];
+            if (orderType == Type.Bid) _matchOrders(newOrder, bestOrder);
+            else _matchOrders(bestOrder, newOrder);
             i++;
         }
 
         if (newOrder.status == Status.Open) {
-            price_openAsks[_price].push(_id);
-            _insertAskInStack(_price);
+            openOrders[price].push(_id);
+            _insertOrderInStack(
+                price,
+                orderType,
+                openOrders[price],
+                openOrdersStack
+            );
         }
 
         _id++;
 
         if (i == 0) return;
+        Order storage secondBestOrder = orderID_order[
+            antagonistOpenOrders[price][i - 1]
+        ];
+        antagonistOpenOrders[price] = secondBestOrder.status == Status.Filled
+            ? _skip(antagonistOpenOrders[price], i)
+            : _skip(antagonistOpenOrders[price], i - 1);
 
-        price_openBids[_price] = orderID_order[price_openBids[_price][i - 1]]
-            .status == Status.Filled
-            ? _skip(price_openBids[_price], i)
-            : _skip(price_openBids[_price], i - 1);
-
-        if (price_openBids[_price].length == 0) openBidsStack.pop();
+        if (antagonistOpenOrders[price].length == 0)
+            antagonistOpenOrdersStack.pop();
     }
 
-    function _insertAskInStack(uint256 _price) private {
-        if (price_openAsks[_price].length == 1) {
-            uint256 j = openAsksStack.length;
-            openAsksStack.push(_price);
-            while (j > 0 && openAsksStack[j - 1] < _price) {
-                openAsksStack[j] = openAsksStack[j - 1];
+    function _insertOrderInStack(
+        uint256 _price,
+        Type _orderType,
+        uint256[] storage openOrders,
+        uint256[] storage orderStack
+    ) private {
+        if (openOrders.length == 1) {
+            uint256 j = orderStack.length;
+            orderStack.push(_price);
+            while (
+                j > 0 &&
+                ((_orderType == Type.Bid && orderStack[j - 1] > _price) ||
+                    (_orderType == Type.Ask && orderStack[j - 1] < _price))
+            ) {
+                orderStack[j] = orderStack[j - 1];
                 j--;
             }
-            openAsksStack[j] = _price;
+            orderStack[j] = _price;
         }
     }
 
