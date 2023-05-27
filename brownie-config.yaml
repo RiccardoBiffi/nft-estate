@@ -44,3 +44,5 @@ networks:
     dai_usd_feed: '0x0d79df66BE487753B02D015Fb622DED7f0E9798d'
     eur_usd_feed: '0x21420f2Fa4082d4Bf023698bB574F7D510345260'
     verify: True
+  arbitrum-test:
+    verify: True
