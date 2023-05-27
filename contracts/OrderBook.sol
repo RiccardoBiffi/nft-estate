@@ -7,10 +7,6 @@ import "./interfaces/IOrderBook.sol";
 //security avoid reentrancy attacks
 //todo add and test events
 
-//todo review ask and bid logic after meaning fix
-//ask: io, per questa cosa che ho e voglio vendere, ti chiedo 0,5 l'uno (+ è meglio)
-//bid: io, per questa cosa che tu hai e voglio acquistare, ti offro 0,5 l'uno (- è meglio)
-
 contract OrderBook is IOrderBook {
     struct Order {
         address maker;
@@ -21,6 +17,11 @@ contract OrderBook is IOrderBook {
         Status status;
         uint256 timestampOpen;
         uint256 timestampClose;
+    }
+
+    struct WeightedPrice {
+        uint256 price;
+        uint256 weight;
     }
 
     enum Type {
@@ -63,13 +64,11 @@ contract OrderBook is IOrderBook {
 
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        require(openAsksStack.length > 0, "There are no open asks");
-
-        uint256 bestPrice = bestAskPrice();
+        require(openAsksStack.length > 0, "No open asks");
 
         orderID_order[_id] = Order(
             msg.sender,
-            bestPrice,
+            0,
             _amount,
             _amount,
             Type.MarketBuy,
@@ -79,40 +78,70 @@ contract OrderBook is IOrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        user_ordersId[msg.sender].push(_id);
         _id++;
 
-        while (newOrder.status != Status.Filled || bestPrice < _MAX_UINT) {
-            uint256 bestBidId = price_openBids[bestPrice][0];
-            Order storage bestBidOrder = orderID_order[bestBidId];
+        uint256 bestPrice = bestAskPrice();
+        WeightedPrice[] memory weightedPrices = new WeightedPrice[](
+            openAsksStack.length + 1
+        );
+        weightedPrices[0] = WeightedPrice(bestPrice, 0);
 
-            _matchOrders(bestBidOrder, newOrder);
+        uint256 i = 0;
+        uint256 j = 0;
+        while (newOrder.status != Status.Filled && bestPrice < _MAX_UINT) {
+            uint256 bestAskId = price_openAsks[bestPrice][i];
+            Order storage bestAskOrder = orderID_order[bestAskId];
+            uint256 askRemainder = bestAskOrder.amount;
 
-            if (bestBidOrder.status == Status.Filled) {
-                _deleteItem(0, price_openBids[bestPrice]);
-                if (price_openBids[bestPrice].length == 0) {
-                    openBidsStack.pop();
-                    bestPrice = bestAskPrice();
-                }
+            newOrder.pricePerUnit = bestPrice;
+            _matchOrders(newOrder, bestAskOrder);
+
+            if (bestAskOrder.status == Status.Filled) {
+                weightedPrices[j].weight += askRemainder;
+                i++;
+            }
+            if (price_openAsks[bestPrice].length == i) {
+                price_openAsks[bestPrice] = new uint[](0);
+                openAsksStack.pop();
+                bestPrice = bestAskPrice();
+                i = 0;
+                j++;
+                weightedPrices[j] = WeightedPrice(bestPrice, 0);
             }
         }
 
+        _skip(price_openAsks[bestPrice], i);
+
+        uint256 totalBuy = 0;
+        uint256 weightSum = 0;
+        uint256 pricesNumber = weightedPrices[j].weight == 0 ? j : j + 1;
+        for (uint256 k = 0; k < pricesNumber; k++) {
+            totalBuy += weightedPrices[k].price * weightedPrices[k].weight;
+            weightSum += weightedPrices[k].weight;
+        }
+
+        newOrder.pricePerUnit = totalBuy / weightSum;
+
         if (newOrder.status == Status.Open) {
-            addAsk(marketPrice, newOrder.amount);
+            uint256 remainder = newOrder.amount;
+            _fillOrder(newOrder);
+            newOrder.amount = remainder;
+            addBid(marketPrice, remainder);
         }
     }
 
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
-        require(openBidsStack.length > 0, "There are no open bids");
+        require(openBidsStack.length > 0, "No open bids");
         require(
             IERC20(bookToken).balanceOf(msg.sender) >= _amount,
             "Insufficient funds"
         );
 
-        uint256 bestPrice = bestBidPrice();
         orderID_order[_id] = Order(
             msg.sender,
-            bestPrice,
+            _MAX_UINT,
             _amount,
             _amount,
             Type.MarketSell,
@@ -122,25 +151,56 @@ contract OrderBook is IOrderBook {
         );
 
         Order storage newOrder = orderID_order[_id];
+        user_ordersId[msg.sender].push(_id);
         _id++;
 
-        while (newOrder.status != Status.Filled || bestPrice > 0) {
-            uint256 bestAskId = price_openAsks[bestPrice][0];
-            Order storage bestAskOrder = orderID_order[bestAskId];
+        uint256 bestPrice = bestBidPrice();
+        WeightedPrice[] memory weightedPrices = new WeightedPrice[](
+            openBidsStack.length + 1
+        );
+        weightedPrices[0] = WeightedPrice(bestPrice, 0);
 
-            _matchOrders(newOrder, bestAskOrder);
+        uint256 i = 0;
+        uint256 j = 0;
+        while (newOrder.status != Status.Filled && bestPrice > 0) {
+            uint256 bestBidId = price_openBids[bestPrice][i];
+            Order storage bestBidOrder = orderID_order[bestBidId];
+            uint256 bidRemainder = bestBidOrder.amount;
 
-            if (bestAskOrder.status == Status.Filled) {
-                _deleteItem(0, price_openAsks[bestPrice]);
-                if (price_openAsks[bestPrice].length == 0) {
-                    openAsksStack.pop();
-                    bestPrice = bestBidPrice();
-                }
+            newOrder.pricePerUnit = bestPrice;
+            _matchOrders(bestBidOrder, newOrder);
+
+            if (bestBidOrder.status == Status.Filled) {
+                weightedPrices[j].weight += bidRemainder;
+                i++;
+            }
+            if (price_openBids[bestPrice].length == i) {
+                price_openBids[bestPrice] = new uint[](0);
+                openBidsStack.pop();
+                bestPrice = bestBidPrice();
+                i = 0;
+                j++;
+                weightedPrices[j] = WeightedPrice(bestPrice, 0);
             }
         }
 
+        _skip(price_openBids[bestPrice], i);
+
+        uint256 totalSell = 0;
+        uint256 weightSum = 0;
+        uint256 pricesNumber = weightedPrices[j].weight == 0 ? j : j + 1;
+        for (uint256 k = 0; k < pricesNumber; k++) {
+            totalSell += weightedPrices[k].price * weightedPrices[k].weight;
+            weightSum += weightedPrices[k].weight;
+        }
+
+        newOrder.pricePerUnit = totalSell / weightSum;
+
         if (newOrder.status == Status.Open) {
-            addBid(marketPrice, newOrder.amount);
+            uint256 remainder = newOrder.amount;
+            _fillOrder(newOrder);
+            newOrder.amount = remainder;
+            addAsk(marketPrice, remainder);
         }
     }
 
@@ -296,22 +356,22 @@ contract OrderBook is IOrderBook {
             _fillOrder(bid);
         }
 
-        if (ask.orderType == Type.MarketBuy) {
-            IERC20(bookToken).transfer(ask.maker, matchedBookTokens);
+        if (bid.orderType == Type.MarketBuy) {
+            IERC20(bookToken).transfer(bid.maker, matchedBookTokens);
             IERC20(priceToken).transferFrom(
-                ask.maker,
                 bid.maker,
+                ask.maker,
                 (matchedBookTokens * ask.pricePerUnit) / 1e18
             );
-        } else if (bid.orderType == Type.MarketSell) {
+        } else if (ask.orderType == Type.MarketSell) {
             IERC20(bookToken).transferFrom(
-                bid.maker,
                 ask.maker,
+                bid.maker,
                 matchedBookTokens
             );
             IERC20(priceToken).transfer(
-                bid.maker,
-                (matchedBookTokens * ask.pricePerUnit) / 1e18
+                ask.maker,
+                (matchedBookTokens * bid.pricePerUnit) / 1e18
             );
         } else {
             IERC20(bookToken).transfer(bid.maker, matchedBookTokens);
@@ -340,63 +400,53 @@ contract OrderBook is IOrderBook {
     }
 
     function cancelOrder(uint256 orderID) external {
-        require(
-            msg.sender == orderID_order[orderID].maker,
-            "Only the maker can cancel the order"
-        );
-        require(
-            orderID_order[orderID].status == Status.Open,
-            "Order is not open"
-        );
+        require(orderID_order[orderID].maker != address(0), "Order not found");
+        require(msg.sender == orderID_order[orderID].maker, "Not order maker");
+        require(orderID_order[orderID].status == Status.Open, "Order not open");
 
-        orderID_order[orderID].status = Status.Cancelled;
-        orderID_order[orderID].timestampClose = block.timestamp;
+        Order storage order = orderID_order[orderID];
+        order.status = Status.Cancelled;
+        order.timestampClose = block.timestamp;
 
-        if (orderID_order[orderID].orderType == Type.Bid) {
-            uint256[] storage openBids = price_openBids[
-                orderID_order[orderID].pricePerUnit
-            ];
+        if (order.orderType == Type.Bid) {
+            uint256[] storage openBids = price_openBids[order.pricePerUnit];
             for (uint256 i = 0; i < openBids.length; i++) {
                 if (openBids[i] == orderID) {
                     _deleteItem(i, openBids);
                     break;
                 }
             }
-            for (uint256 i = 0; i < openBidsStack.length; i++) {
-                if (openBidsStack[i] == orderID) {
-                    _deleteItem(i, openBidsStack);
-                    break;
+            if (openBids.length == 0) {
+                for (uint256 i = 0; i < openBidsStack.length; i++) {
+                    if (openBidsStack[i] == order.pricePerUnit) {
+                        _deleteItem(i, openBidsStack);
+                        break;
+                    }
                 }
             }
 
-            IERC20(bookToken).transferFrom(
-                address(this),
-                orderID_order[orderID].maker,
-                orderID_order[orderID].amount
+            IERC20(priceToken).transfer(
+                order.maker,
+                (order.amount * order.pricePerUnit) / 1e18
             );
         } else {
-            uint256[] storage openAsks = price_openAsks[
-                orderID_order[orderID].pricePerUnit
-            ];
+            uint256[] storage openAsks = price_openAsks[order.pricePerUnit];
             for (uint256 i = 0; i < openAsks.length; i++) {
                 if (openAsks[i] == orderID) {
                     _deleteItem(i, openAsks);
                     break;
                 }
             }
-            for (uint256 i = 0; i < openAsksStack.length; i++) {
-                if (openAsksStack[i] == orderID) {
-                    _deleteItem(i, openAsksStack);
-                    break;
+            if (openAsks.length == 0) {
+                for (uint256 i = 0; i < openAsksStack.length; i++) {
+                    if (openAsksStack[i] == order.pricePerUnit) {
+                        _deleteItem(i, openAsksStack);
+                        break;
+                    }
                 }
             }
 
-            IERC20(priceToken).transferFrom(
-                address(this),
-                orderID_order[orderID].maker,
-                (orderID_order[orderID].amount *
-                    orderID_order[orderID].pricePerUnit) / 1e18
-            );
+            IERC20(bookToken).transfer(order.maker, order.amount);
         }
     }
 
