@@ -19,22 +19,21 @@ contract OrderBook is IOrderBook {
         uint256 timestampClose;
     }
 
+    struct OrderParams {
+        uint256 price;
+        uint256 amount;
+        Type orderType;
+        address token;
+    }
+
     struct WeightedPrice {
         uint256 price;
         uint256 weight;
     }
 
-    enum Type {
-        Bid,
-        Ask,
-        MarketBuy,
-        MarketSell
-    }
-
-    enum Status {
-        Open,
-        Filled,
-        Cancelled
+    struct Match {
+        uint256 amount;
+        uint256 timestamp;
     }
 
     uint256 private constant _MAX_UINT = type(uint256).max;
@@ -43,12 +42,12 @@ contract OrderBook is IOrderBook {
     address public bookToken;
     address public priceToken;
     uint256 public marketPrice;
+    // todo add commission
 
     mapping(uint256 => Order) public orderID_order;
+    mapping(uint256 => Match[]) public orderID_matches;
     mapping(address => uint256[]) public user_ordersId;
-    //todo make private after testing
     mapping(uint256 => uint256[]) public price_openAsks; // asks ordered by time
-    //todo make private after testing
     mapping(uint256 => uint256[]) public price_openBids; // bids ordered by time
     // stack of all open asks ordered by pricePerUnit asc, [length-1] is the best
     uint256[] public openAsksStack;
@@ -62,6 +61,7 @@ contract OrderBook is IOrderBook {
         marketPrice = 0;
     }
 
+    // todo refactor in one function with marketSell
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
         require(openAsksStack.length > 0, "No open asks");
@@ -79,7 +79,6 @@ contract OrderBook is IOrderBook {
 
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
-        _id++;
 
         uint256 bestPrice = bestAskPrice();
         WeightedPrice[] memory weightedPrices = new WeightedPrice[](
@@ -95,7 +94,7 @@ contract OrderBook is IOrderBook {
             uint256 askRemainder = bestAskOrder.amount;
 
             newOrder.pricePerUnit = bestPrice;
-            _matchOrders(newOrder, bestAskOrder);
+            _matchOrders(_id, bestAskId);
 
             if (bestAskOrder.status == Status.Filled) {
                 weightedPrices[j].weight += askRemainder;
@@ -125,21 +124,27 @@ contract OrderBook is IOrderBook {
 
         if (newOrder.status == Status.Open) {
             uint256 remainder = newOrder.amount;
-            _fillOrder(newOrder);
+            _fillOrder(newOrder, _id);
             newOrder.amount = remainder;
-            _addLimitOrder(
+
+            OrderParams memory orderParams = OrderParams(
                 marketPrice,
                 remainder,
                 Type.Bid,
-                priceToken,
+                priceToken
+            );
+            _addLimitOrder(
+                orderParams,
                 price_openBids,
                 price_openAsks,
                 openBidsStack,
                 openAsksStack
             );
         }
+        _id++;
     }
 
+    // todo refactor in one function with marketBuy
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
         require(openBidsStack.length > 0, "No open bids");
@@ -161,7 +166,6 @@ contract OrderBook is IOrderBook {
 
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
-        _id++;
 
         uint256 bestPrice = bestBidPrice();
         WeightedPrice[] memory weightedPrices = new WeightedPrice[](
@@ -177,7 +181,7 @@ contract OrderBook is IOrderBook {
             uint256 bidRemainder = bestBidOrder.amount;
 
             newOrder.pricePerUnit = bestPrice;
-            _matchOrders(bestBidOrder, newOrder);
+            _matchOrders(bestBidId, _id);
 
             if (bestBidOrder.status == Status.Filled) {
                 weightedPrices[j].weight += bidRemainder;
@@ -207,19 +211,24 @@ contract OrderBook is IOrderBook {
 
         if (newOrder.status == Status.Open) {
             uint256 remainder = newOrder.amount;
-            _fillOrder(newOrder);
+            _fillOrder(newOrder, _id);
             newOrder.amount = remainder;
-            _addLimitOrder(
+
+            OrderParams memory orderParams = OrderParams(
                 marketPrice,
                 remainder,
                 Type.Ask,
-                bookToken,
+                bookToken
+            );
+            _addLimitOrder(
+                orderParams,
                 price_openAsks,
                 price_openBids,
                 openAsksStack,
                 openBidsStack
             );
         }
+        _id++;
     }
 
     function addBid(uint256 _price, uint256 _amount) external {
@@ -230,11 +239,15 @@ contract OrderBook is IOrderBook {
             "Price must be less or equal than best ask price"
         );
 
-        _addLimitOrder(
+        OrderParams memory orderParams = OrderParams(
             _price,
             _amount,
             Type.Bid,
-            priceToken,
+            priceToken
+        );
+
+        _addLimitOrder(
+            orderParams,
             price_openBids,
             price_openAsks,
             openBidsStack,
@@ -250,11 +263,15 @@ contract OrderBook is IOrderBook {
             "Price must be greater or equal than best bid price"
         );
 
-        _addLimitOrder(
+        OrderParams memory orderParams = OrderParams(
             _price,
             _amount,
             Type.Ask,
-            bookToken,
+            bookToken
+        );
+
+        _addLimitOrder(
+            orderParams,
             price_openAsks,
             price_openBids,
             openAsksStack,
@@ -263,10 +280,7 @@ contract OrderBook is IOrderBook {
     }
 
     function _addLimitOrder(
-        uint256 price,
-        uint256 amount,
-        Type orderType,
-        address token,
+        OrderParams memory orderParams,
         mapping(uint256 => uint256[]) storage openOrders,
         mapping(uint256 => uint256[]) storage antagonistOpenOrders,
         uint256[] storage openOrdersStack,
@@ -274,10 +288,10 @@ contract OrderBook is IOrderBook {
     ) internal {
         orderID_order[_id] = Order(
             msg.sender,
-            price,
-            amount,
-            amount,
-            orderType,
+            orderParams.price,
+            orderParams.amount,
+            orderParams.amount,
+            orderParams.orderType,
             Status.Open,
             block.timestamp,
             0
@@ -286,30 +300,34 @@ contract OrderBook is IOrderBook {
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
 
-        uint256 transferAmount = orderType == Type.Bid
-            ? (amount * price) / 1e18
-            : amount;
-        IERC20(token).transferFrom(msg.sender, address(this), transferAmount);
+        uint256 transferAmount = orderParams.orderType == Type.Bid
+            ? (orderParams.amount * orderParams.price) / 1e18
+            : orderParams.amount;
+        IERC20(orderParams.token).transferFrom(
+            msg.sender,
+            address(this),
+            transferAmount
+        );
 
         uint256 i = 0;
         while (
             newOrder.status == Status.Open &&
-            i < antagonistOpenOrders[price].length
+            i < antagonistOpenOrders[orderParams.price].length
         ) {
-            Order storage bestOrder = orderID_order[
-                antagonistOpenOrders[price][i]
-            ];
-            if (orderType == Type.Bid) _matchOrders(newOrder, bestOrder);
-            else _matchOrders(bestOrder, newOrder);
+            uint256 bestOrderID = antagonistOpenOrders[orderParams.price][i];
+
+            if (orderParams.orderType == Type.Bid)
+                _matchOrders(_id, bestOrderID);
+            else _matchOrders(bestOrderID, _id);
             i++;
         }
 
         if (newOrder.status == Status.Open) {
-            openOrders[price].push(_id);
+            openOrders[orderParams.price].push(_id);
             _insertOrderInStack(
-                price,
-                orderType,
-                openOrders[price],
+                orderParams.price,
+                orderParams.orderType,
+                openOrders[orderParams.price],
                 openOrdersStack
             );
         }
@@ -318,13 +336,14 @@ contract OrderBook is IOrderBook {
 
         if (i == 0) return;
         Order storage secondBestOrder = orderID_order[
-            antagonistOpenOrders[price][i - 1]
+            antagonistOpenOrders[orderParams.price][i - 1]
         ];
-        antagonistOpenOrders[price] = secondBestOrder.status == Status.Filled
-            ? _skip(antagonistOpenOrders[price], i)
-            : _skip(antagonistOpenOrders[price], i - 1);
+        antagonistOpenOrders[orderParams.price] = secondBestOrder.status ==
+            Status.Filled
+            ? _skip(antagonistOpenOrders[orderParams.price], i)
+            : _skip(antagonistOpenOrders[orderParams.price], i - 1);
 
-        if (antagonistOpenOrders[price].length == 0)
+        if (antagonistOpenOrders[orderParams.price].length == 0)
             antagonistOpenOrdersStack.pop();
     }
 
@@ -349,24 +368,23 @@ contract OrderBook is IOrderBook {
         }
     }
 
-    function _matchOrders(Order storage bid, Order storage ask) internal {
+    function _matchOrders(uint256 bidId, uint256 askId) internal {
         uint256 matchedBookTokens = 0;
+        Order storage bid = orderID_order[bidId];
+        Order storage ask = orderID_order[askId];
 
         if (bid.amount == ask.amount) {
-            // complete match
             matchedBookTokens = bid.amount;
-            _fillOrder(bid);
-            _fillOrder(ask);
+            _fillOrder(bid, bidId);
+            _fillOrder(ask, askId);
         } else if (bid.amount > ask.amount) {
-            // partial match, bid is larger
             matchedBookTokens = ask.amount;
-            bid.amount -= ask.amount;
-            _fillOrder(ask);
+            _partialFillOrder(bid, ask.amount, bidId);
+            _fillOrder(ask, askId);
         } else {
-            // partial match, ask is larger
             matchedBookTokens = bid.amount;
-            ask.amount -= bid.amount;
-            _fillOrder(bid);
+            _partialFillOrder(ask, bid.amount, askId);
+            _fillOrder(bid, bidId);
         }
 
         if (bid.orderType == Type.MarketBuy) {
@@ -396,10 +414,20 @@ contract OrderBook is IOrderBook {
         marketPrice = ask.pricePerUnit;
     }
 
-    function _fillOrder(Order storage order) internal {
+    function _fillOrder(Order storage order, uint256 orderId) internal {
+        orderID_matches[orderId].push(Match(order.amount, block.timestamp));
         order.amount = 0;
         order.status = Status.Filled;
         order.timestampClose = block.timestamp;
+    }
+
+    function _partialFillOrder(
+        Order storage order,
+        uint256 amount,
+        uint256 orderId
+    ) internal {
+        orderID_matches[orderId].push(Match(amount, block.timestamp));
+        order.amount -= amount;
     }
 
     function bestBidPrice() public view returns (uint256) {
@@ -407,9 +435,94 @@ contract OrderBook is IOrderBook {
         return openBidsStack[openBidsStack.length - 1];
     }
 
+    function _getBidPrice(uint256 index) internal view returns (uint256) {
+        if (openBidsStack.length == index) return 0;
+        return openBidsStack[openBidsStack.length - (1 + index)];
+    }
+
     function bestAskPrice() public view returns (uint256) {
         if (openAsksStack.length == 0) return _MAX_UINT;
         return openAsksStack[openAsksStack.length - 1];
+    }
+
+    function _getAskPrice(uint256 index) internal view returns (uint256) {
+        if (openAsksStack.length == index) return _MAX_UINT;
+        return openAsksStack[openAsksStack.length - (1 + index)];
+    }
+
+    function getLiquidityDepthByPrice(
+        uint256 price
+    ) external view returns (uint256) {
+        uint256 liquidityDepth = 0;
+
+        uint256[] storage openOrders = price_openBids[price].length > 0
+            ? price_openBids[price]
+            : price_openAsks[price];
+
+        for (uint256 i = 0; i < openOrders.length; i++) {
+            uint256 orderId = openOrders[i];
+            Order storage order = orderID_order[orderId];
+            liquidityDepth += order.amount;
+        }
+
+        return liquidityDepth;
+    }
+
+    function getMarketOrderAveragePrice(
+        uint256 amount,
+        Type orderType
+    ) external view returns (uint256) {
+        require(amount > 0, "Amount must be greater than zero");
+        require(
+            (orderType == Type.MarketBuy && openAsksStack.length > 0) ||
+                (orderType == Type.MarketSell && openBidsStack.length > 0),
+            "No open orders"
+        );
+
+        uint256 totalAmount = 0;
+        uint256 totalValue = 0;
+        uint256 i = 0;
+        uint256 j = 1;
+        uint256 bestPrice = orderType == Type.MarketBuy
+            ? bestAskPrice()
+            : bestBidPrice();
+
+        while (
+            totalAmount < amount &&
+            ((orderType == Type.MarketBuy && bestPrice < _MAX_UINT) ||
+                (orderType == Type.MarketSell && bestPrice > 0))
+        ) {
+            uint256 bestOrderId = orderType == Type.MarketBuy
+                ? price_openAsks[bestPrice][i]
+                : price_openBids[bestPrice][i];
+            uint256 orderRemainder = orderID_order[bestOrderId].amount;
+
+            totalAmount += orderRemainder;
+            totalValue += orderRemainder * bestPrice;
+
+            i++;
+
+            if (
+                (orderType == Type.MarketBuy &&
+                    price_openAsks[bestPrice].length == i) ||
+                (orderType == Type.MarketSell &&
+                    price_openBids[bestPrice].length == i)
+            ) {
+                bestPrice = orderType == Type.MarketBuy
+                    ? _getAskPrice(j)
+                    : _getBidPrice(j);
+                i = 0;
+                j++;
+            }
+        }
+
+        uint256 remainder = totalAmount - amount;
+        if (remainder > 0) {
+            totalValue -= remainder * bestPrice;
+            totalAmount -= remainder;
+        }
+
+        return totalValue / totalAmount;
     }
 
     function cancelOrder(uint256 orderID) external {
