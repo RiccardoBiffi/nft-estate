@@ -14,6 +14,10 @@ EMPTY_ORDER = (
     0,
     0,
 )
+EMPTY_MATCH = (
+    0,
+    0,
+)
 
 
 def test_can_deploy_contract():
@@ -65,6 +69,7 @@ def test_addBid_success_single(order_book, price_token, supply, account):
     assert order_book.price_openBids(price, 0) == 1
     assert order_book.openBidsStack(0) == price
     assert order_book.bestBidPrice() == price
+    assert order_book.orderID_matches(1, 0) == EMPTY_MATCH
 
 
 def test_addBid_success_multiple_same_price(order_book, price_token, supply, account):
@@ -171,6 +176,16 @@ def test_addBid_success_match_complete(
         order_book.orderID_order(2)[6],
         order_book.orderID_order(2)[7],
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        order_book.orderID_matches(1, 0)[1],
+    )
+    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        bid,
+        order_book.orderID_matches(2, 0)[1],
+    )
+    assert order_book.orderID_matches(2, 0)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask
     assert book_token.balanceOf(asker) == supply - bid
@@ -233,6 +248,16 @@ def test_addBid_success_match_partial_bid(
         order_book.orderID_order(2)[6],
         0,
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        order_book.orderID_matches(1, 0)[1],
+    )
+    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        ask,
+        order_book.orderID_matches(2, 0)[1],
+    )
+    assert order_book.orderID_matches(2, 0)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask
     assert book_token.balanceOf(asker) == supply - ask
@@ -364,6 +389,26 @@ def test_addBid_success_match_multiple_ask_same_price_complete(
         order_book.orderID_order(3)[6],
         order_book.orderID_order(3)[7],
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        order_book.orderID_matches(1, 0)[1],
+    )
+    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        ask,
+        order_book.orderID_matches(2, 0)[1],
+    )
+    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0) == (
+        ask,
+        order_book.orderID_matches(3, 0)[1],
+    )
+    assert order_book.orderID_matches(3, 1) == (
+        ask,
+        order_book.orderID_matches(3, 1)[1],
+    )
+    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask * 2
     assert book_token.balanceOf(asker) == supply - ask * 2
@@ -438,6 +483,26 @@ def test_addBid_success_match_multiple_ask_same_price_partial_bid(
         order_book.orderID_order(3)[6],
         0,
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        order_book.orderID_matches(1, 0)[1],
+    )
+    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        ask,
+        order_book.orderID_matches(2, 0)[1],
+    )
+    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0) == (
+        ask,
+        order_book.orderID_matches(3, 0)[1],
+    )
+    assert order_book.orderID_matches(3, 1) == (
+        ask,
+        order_book.orderID_matches(3, 1)[1],
+    )
+    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask * 2
     assert book_token.balanceOf(asker) == supply - ask * 2
@@ -510,6 +575,26 @@ def test_addBid_success_match_multiple_ask_same_price_partial_ask(
         order_book.orderID_order(3)[6],
         order_book.orderID_order(3)[7],
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        order_book.orderID_matches(1, 0)[1],
+    )
+    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        bid - ask,
+        order_book.orderID_matches(2, 0)[1],
+    )
+    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0) == (
+        ask,
+        order_book.orderID_matches(3, 0)[1],
+    )
+    assert order_book.orderID_matches(3, 1) == (
+        bid - ask,
+        order_book.orderID_matches(3, 1)[1],
+    )
+    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 5 * 10**18
     assert book_token.balanceOf(account) == supply + bid
     assert book_token.balanceOf(asker) == supply - ask * 2
@@ -2329,4 +2414,12 @@ def test_cancelOrder_fail_order_not_open(order_book, book_token, account):
         order_book.cancelOrder(2, {"from": account})
 
 
+# endregion
+
+# region getLiquidityDepthByPrice
+# todo
+# endregion
+
+# region getMarketOrderAveragePrice
+# todo
 # endregion
