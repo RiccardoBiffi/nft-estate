@@ -26,13 +26,9 @@ contract OrderBook is IOrderBook {
         address token;
     }
 
-    struct WeightedPrice {
-        uint256 price;
-        uint256 weight;
-    }
-
     struct Match {
         uint256 amount;
+        uint256 price;
         uint256 timestamp;
     }
 
@@ -61,104 +57,34 @@ contract OrderBook is IOrderBook {
         marketPrice = 0;
     }
 
-    // todo refactor in one function with marketSell
     function marketBuy(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
         require(openAsksStack.length > 0, "No open asks");
 
-        orderID_order[_id] = Order(
-            msg.sender,
-            0,
-            _amount,
-            _amount,
-            Type.MarketBuy,
-            Status.Open,
-            block.timestamp,
-            0
-        );
-
-        Order storage newOrder = orderID_order[_id];
-        user_ordersId[msg.sender].push(_id);
-
-        uint256 bestPrice = bestAskPrice();
-        WeightedPrice[] memory weightedPrices = new WeightedPrice[](
-            openAsksStack.length + 1
-        );
-        weightedPrices[0] = WeightedPrice(bestPrice, 0);
-
-        uint256 i = 0;
-        uint256 j = 0;
-        while (newOrder.status != Status.Filled && bestPrice < _MAX_UINT) {
-            uint256 bestAskId = price_openAsks[bestPrice][i];
-            Order storage bestAskOrder = orderID_order[bestAskId];
-            uint256 askRemainder = bestAskOrder.amount;
-
-            newOrder.pricePerUnit = bestPrice;
-            _matchOrders(_id, bestAskId);
-
-            if (bestAskOrder.status == Status.Filled) {
-                weightedPrices[j].weight += askRemainder;
-                i++;
-            }
-            if (price_openAsks[bestPrice].length == i) {
-                price_openAsks[bestPrice] = new uint[](0);
-                openAsksStack.pop();
-                bestPrice = bestAskPrice();
-                i = 0;
-                j++;
-                weightedPrices[j] = WeightedPrice(bestPrice, 0);
-            }
-        }
-
-        _skip(price_openAsks[bestPrice], i);
-
-        uint256 totalBuy = 0;
-        uint256 weightSum = 0;
-        uint256 pricesNumber = weightedPrices[j].weight == 0 ? j : j + 1;
-        for (uint256 k = 0; k < pricesNumber; k++) {
-            totalBuy += weightedPrices[k].price * weightedPrices[k].weight;
-            weightSum += weightedPrices[k].weight;
-        }
-
-        newOrder.pricePerUnit = totalBuy / weightSum;
-
-        if (newOrder.status == Status.Open) {
-            uint256 remainder = newOrder.amount;
-            _fillOrder(newOrder, _id);
-            newOrder.amount = remainder;
-
-            OrderParams memory orderParams = OrderParams(
-                marketPrice,
-                remainder,
-                Type.Bid,
-                priceToken
-            );
-            _addLimitOrder(
-                orderParams,
-                price_openBids,
-                price_openAsks,
-                openBidsStack,
-                openAsksStack
-            );
-        }
-        _id++;
+        _marketOrder(_amount, Type.MarketBuy, price_openAsks, openAsksStack);
     }
 
-    // todo refactor in one function with marketBuy
     function marketSell(uint256 _amount) public {
         require(_amount > 0, "Amount must be greater than zero");
         require(openBidsStack.length > 0, "No open bids");
-        require(
-            IERC20(bookToken).balanceOf(msg.sender) >= _amount,
-            "Insufficient funds"
-        );
+
+        _marketOrder(_amount, Type.MarketSell, price_openBids, openBidsStack);
+    }
+
+    function _marketOrder(
+        uint256 _amount,
+        Type _orderType,
+        mapping(uint256 => uint256[]) storage openOrders,
+        uint256[] storage openOrdersStack
+    ) internal {
+        uint256 maxPrice = _orderType == Type.MarketBuy ? _MAX_UINT : 0;
 
         orderID_order[_id] = Order(
             msg.sender,
-            _MAX_UINT,
+            maxPrice,
             _amount,
             _amount,
-            Type.MarketSell,
+            _orderType,
             Status.Open,
             block.timestamp,
             0
@@ -167,68 +93,84 @@ contract OrderBook is IOrderBook {
         Order storage newOrder = orderID_order[_id];
         user_ordersId[msg.sender].push(_id);
 
-        uint256 bestPrice = bestBidPrice();
-        WeightedPrice[] memory weightedPrices = new WeightedPrice[](
-            openBidsStack.length + 1
-        );
-        weightedPrices[0] = WeightedPrice(bestPrice, 0);
+        uint256 bestPrice = _orderType == Type.MarketBuy
+            ? bestAskPrice()
+            : bestBidPrice();
 
         uint256 i = 0;
-        uint256 j = 0;
-        while (newOrder.status != Status.Filled && bestPrice > 0) {
-            uint256 bestBidId = price_openBids[bestPrice][i];
-            Order storage bestBidOrder = orderID_order[bestBidId];
-            uint256 bidRemainder = bestBidOrder.amount;
-
+        while (
+            newOrder.status != Status.Filled &&
+            ((_orderType == Type.MarketBuy && bestPrice < maxPrice) ||
+                (_orderType == Type.MarketSell && bestPrice > maxPrice))
+        ) {
+            uint256 bestOrderId = openOrders[bestPrice][i];
+            Order storage bestOrder = orderID_order[bestOrderId];
             newOrder.pricePerUnit = bestPrice;
-            _matchOrders(bestBidId, _id);
 
-            if (bestBidOrder.status == Status.Filled) {
-                weightedPrices[j].weight += bidRemainder;
-                i++;
-            }
-            if (price_openBids[bestPrice].length == i) {
-                price_openBids[bestPrice] = new uint[](0);
-                openBidsStack.pop();
-                bestPrice = bestBidPrice();
+            if (_orderType == Type.MarketBuy) _matchOrders(_id, bestOrderId);
+            else _matchOrders(bestOrderId, _id);
+
+            if (bestOrder.status == Status.Filled) i++;
+
+            if (openOrders[bestPrice].length == i) {
+                openOrders[bestPrice] = new uint[](0);
+                openOrdersStack.pop();
+                bestPrice = _orderType == Type.MarketBuy
+                    ? bestAskPrice()
+                    : bestBidPrice();
                 i = 0;
-                j++;
-                weightedPrices[j] = WeightedPrice(bestPrice, 0);
             }
         }
 
-        _skip(price_openBids[bestPrice], i);
+        _skip(openOrders[bestPrice], i);
 
-        uint256 totalSell = 0;
-        uint256 weightSum = 0;
-        uint256 pricesNumber = weightedPrices[j].weight == 0 ? j : j + 1;
-        for (uint256 k = 0; k < pricesNumber; k++) {
-            totalSell += weightedPrices[k].price * weightedPrices[k].weight;
-            weightSum += weightedPrices[k].weight;
+        uint256 totalAmount = 0;
+        uint256 totalValue = 0;
+        for (uint256 k = 0; k < orderID_matches[_id].length; k++) {
+            Match memory thisMatch = orderID_matches[_id][k];
+            totalValue += thisMatch.price * thisMatch.amount;
+            totalAmount += thisMatch.amount;
         }
 
-        newOrder.pricePerUnit = totalSell / weightSum;
+        newOrder.pricePerUnit = totalAmount == 0 ? 0 : totalValue / totalAmount;
+
+        _id++;
 
         if (newOrder.status == Status.Open) {
             uint256 remainder = newOrder.amount;
-            _fillOrder(newOrder, _id);
+            _fillOrder(newOrder, _id - 1);
             newOrder.amount = remainder;
 
-            OrderParams memory orderParams = OrderParams(
-                marketPrice,
-                remainder,
-                Type.Ask,
-                bookToken
-            );
-            _addLimitOrder(
-                orderParams,
-                price_openAsks,
-                price_openBids,
-                openAsksStack,
-                openBidsStack
-            );
+            if (_orderType == Type.MarketBuy) {
+                OrderParams memory orderParams = OrderParams(
+                    marketPrice,
+                    remainder,
+                    Type.Bid,
+                    priceToken
+                );
+                _addLimitOrder(
+                    orderParams,
+                    price_openBids,
+                    price_openAsks,
+                    openBidsStack,
+                    openAsksStack
+                );
+            } else {
+                OrderParams memory orderParams = OrderParams(
+                    marketPrice,
+                    remainder,
+                    Type.Ask,
+                    bookToken
+                );
+                _addLimitOrder(
+                    orderParams,
+                    price_openAsks,
+                    price_openBids,
+                    openAsksStack,
+                    openBidsStack
+                );
+            }
         }
-        _id++;
     }
 
     function addBid(uint256 _price, uint256 _amount) external {
@@ -415,7 +357,9 @@ contract OrderBook is IOrderBook {
     }
 
     function _fillOrder(Order storage order, uint256 orderId) internal {
-        orderID_matches[orderId].push(Match(order.amount, block.timestamp));
+        orderID_matches[orderId].push(
+            Match(order.amount, order.pricePerUnit, block.timestamp)
+        );
         order.amount = 0;
         order.status = Status.Filled;
         order.timestampClose = block.timestamp;
@@ -426,7 +370,9 @@ contract OrderBook is IOrderBook {
         uint256 amount,
         uint256 orderId
     ) internal {
-        orderID_matches[orderId].push(Match(amount, block.timestamp));
+        orderID_matches[orderId].push(
+            Match(amount, order.pricePerUnit, block.timestamp)
+        );
         order.amount -= amount;
     }
 
@@ -452,7 +398,7 @@ contract OrderBook is IOrderBook {
 
     function getLiquidityDepthByPrice(
         uint256 price
-    ) external view returns (uint256) {
+    ) public view returns (uint256) {
         uint256 liquidityDepth = 0;
 
         uint256[] storage openOrders = price_openBids[price].length > 0
@@ -482,7 +428,6 @@ contract OrderBook is IOrderBook {
         uint256 totalAmount = 0;
         uint256 totalValue = 0;
         uint256 i = 0;
-        uint256 j = 1;
         uint256 bestPrice = orderType == Type.MarketBuy
             ? bestAskPrice()
             : bestBidPrice();
@@ -492,35 +437,25 @@ contract OrderBook is IOrderBook {
             ((orderType == Type.MarketBuy && bestPrice < _MAX_UINT) ||
                 (orderType == Type.MarketSell && bestPrice > 0))
         ) {
-            uint256 bestOrderId = orderType == Type.MarketBuy
-                ? price_openAsks[bestPrice][i]
-                : price_openBids[bestPrice][i];
-            uint256 orderRemainder = orderID_order[bestOrderId].amount;
-
-            totalAmount += orderRemainder;
-            totalValue += orderRemainder * bestPrice;
+            uint256 bestPriceDepth = getLiquidityDepthByPrice(bestPrice);
+            totalAmount += bestPriceDepth;
+            totalValue += bestPriceDepth * bestPrice;
 
             i++;
-
-            if (
-                (orderType == Type.MarketBuy &&
-                    price_openAsks[bestPrice].length == i) ||
-                (orderType == Type.MarketSell &&
-                    price_openBids[bestPrice].length == i)
-            ) {
-                bestPrice = orderType == Type.MarketBuy
-                    ? _getAskPrice(j)
-                    : _getBidPrice(j);
-                i = 0;
-                j++;
-            }
+            bestPrice = orderType == Type.MarketBuy
+                ? _getAskPrice(i)
+                : _getBidPrice(i);
         }
+
+        if (amount >= totalAmount) return totalValue / totalAmount;
+
+        bestPrice = orderType == Type.MarketBuy
+            ? _getAskPrice(i - 1)
+            : _getBidPrice(i - 1);
 
         uint256 remainder = totalAmount - amount;
-        if (remainder > 0) {
-            totalValue -= remainder * bestPrice;
-            totalAmount -= remainder;
-        }
+        totalAmount -= remainder;
+        totalValue -= remainder * bestPrice;
 
         return totalValue / totalAmount;
     }
