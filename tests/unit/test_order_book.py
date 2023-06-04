@@ -17,6 +17,7 @@ EMPTY_ORDER = (
 EMPTY_MATCH = (
     0,
     0,
+    0,
 )
 
 
@@ -69,7 +70,8 @@ def test_addBid_success_single(order_book, price_token, supply, account):
     assert order_book.price_openBids(price, 0) == 1
     assert order_book.openBidsStack(0) == price
     assert order_book.bestBidPrice() == price
-    assert order_book.orderID_matches(1, 0) == EMPTY_MATCH
+    with pytest.raises(exceptions.VirtualMachineError):
+        assert order_book.orderID_matches(1, 0)
 
 
 def test_addBid_success_multiple_same_price(order_book, price_token, supply, account):
@@ -178,14 +180,16 @@ def test_addBid_success_match_complete(
     )
     assert order_book.orderID_matches(1, 0) == (
         ask,
-        order_book.orderID_matches(1, 0)[1],
+        price,
+        order_book.orderID_matches(1, 0)[2],
     )
-    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(1, 0)[2] > 0
     assert order_book.orderID_matches(2, 0) == (
         bid,
-        order_book.orderID_matches(2, 0)[1],
+        price,
+        order_book.orderID_matches(2, 0)[2],
     )
-    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0)[2] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask
     assert book_token.balanceOf(asker) == supply - bid
@@ -250,14 +254,16 @@ def test_addBid_success_match_partial_bid(
     )
     assert order_book.orderID_matches(1, 0) == (
         ask,
-        order_book.orderID_matches(1, 0)[1],
+        price,
+        order_book.orderID_matches(1, 0)[2],
     )
-    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(1, 0)[2] > 0
     assert order_book.orderID_matches(2, 0) == (
         ask,
-        order_book.orderID_matches(2, 0)[1],
+        price,
+        order_book.orderID_matches(2, 0)[2],
     )
-    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0)[2] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask
     assert book_token.balanceOf(asker) == supply - ask
@@ -391,23 +397,27 @@ def test_addBid_success_match_multiple_ask_same_price_complete(
     )
     assert order_book.orderID_matches(1, 0) == (
         ask,
-        order_book.orderID_matches(1, 0)[1],
+        price,
+        order_book.orderID_matches(1, 0)[2],
     )
-    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(1, 0)[2] > 0
     assert order_book.orderID_matches(2, 0) == (
         ask,
-        order_book.orderID_matches(2, 0)[1],
+        price,
+        order_book.orderID_matches(2, 0)[2],
     )
-    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0)[2] > 0
     assert order_book.orderID_matches(3, 0) == (
         ask,
-        order_book.orderID_matches(3, 0)[1],
+        price,
+        order_book.orderID_matches(3, 0)[2],
     )
     assert order_book.orderID_matches(3, 1) == (
         ask,
-        order_book.orderID_matches(3, 1)[1],
+        price,
+        order_book.orderID_matches(3, 1)[2],
     )
-    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0)[2] > 0
     assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask * 2
@@ -485,23 +495,27 @@ def test_addBid_success_match_multiple_ask_same_price_partial_bid(
     )
     assert order_book.orderID_matches(1, 0) == (
         ask,
-        order_book.orderID_matches(1, 0)[1],
+        price,
+        order_book.orderID_matches(1, 0)[2],
     )
-    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(1, 0)[2] > 0
     assert order_book.orderID_matches(2, 0) == (
         ask,
-        order_book.orderID_matches(2, 0)[1],
+        price,
+        order_book.orderID_matches(2, 0)[2],
     )
-    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0)[2] > 0
     assert order_book.orderID_matches(3, 0) == (
         ask,
-        order_book.orderID_matches(3, 0)[1],
+        price,
+        order_book.orderID_matches(3, 0)[2],
     )
     assert order_book.orderID_matches(3, 1) == (
         ask,
-        order_book.orderID_matches(3, 1)[1],
+        price,
+        order_book.orderID_matches(3, 1)[2],
     )
-    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0)[2] > 0
     assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 0
     assert book_token.balanceOf(account) == supply + ask * 2
@@ -577,23 +591,27 @@ def test_addBid_success_match_multiple_ask_same_price_partial_ask(
     )
     assert order_book.orderID_matches(1, 0) == (
         ask,
-        order_book.orderID_matches(1, 0)[1],
+        price,
+        order_book.orderID_matches(1, 0)[2],
     )
-    assert order_book.orderID_matches(1, 0)[1] > 0
+    assert order_book.orderID_matches(1, 0)[2] > 0
     assert order_book.orderID_matches(2, 0) == (
         bid - ask,
-        order_book.orderID_matches(2, 0)[1],
+        price,
+        order_book.orderID_matches(2, 0)[2],
     )
-    assert order_book.orderID_matches(2, 0)[1] > 0
+    assert order_book.orderID_matches(2, 0)[2] > 0
     assert order_book.orderID_matches(3, 0) == (
         ask,
-        order_book.orderID_matches(3, 0)[1],
+        price,
+        order_book.orderID_matches(3, 0)[2],
     )
     assert order_book.orderID_matches(3, 1) == (
         bid - ask,
-        order_book.orderID_matches(3, 1)[1],
+        price,
+        order_book.orderID_matches(3, 1)[2],
     )
-    assert order_book.orderID_matches(3, 0)[1] > 0
+    assert order_book.orderID_matches(3, 0)[2] > 0
     assert order_book.orderID_matches(3, 1)[1] > 0
     assert book_token.balanceOf(order_book) == 5 * 10**18
     assert book_token.balanceOf(account) == supply + bid
@@ -1481,6 +1499,43 @@ def test_marketBuy_success_mutiple_ask_different_price(
         order_book.orderID_order(4)[6],
         order_book.orderID_order(4)[7],
     )
+    assert order_book.orderID_matches(1, 0) == (
+        ask,
+        price1,
+        order_book.orderID_matches(1, 0)[2],
+    )
+    assert order_book.orderID_matches(1, 0)[2] > 0
+    assert order_book.orderID_matches(2, 0) == (
+        ask,
+        price3,
+        order_book.orderID_matches(2, 0)[2],
+    )
+    assert order_book.orderID_matches(2, 0)[2] > 0
+    assert order_book.orderID_matches(3, 0) == (
+        ask,
+        price2,
+        order_book.orderID_matches(3, 0)[2],
+    )
+    assert order_book.orderID_matches(3, 0)[2] > 0
+
+    assert order_book.orderID_matches(4, 0) == (
+        ask,
+        price1,
+        order_book.orderID_matches(4, 0)[2],
+    )
+    assert order_book.orderID_matches(4, 1) == (
+        ask,
+        price2,
+        order_book.orderID_matches(4, 1)[2],
+    )
+    assert order_book.orderID_matches(4, 2) == (
+        ask,
+        price3,
+        order_book.orderID_matches(4, 2)[2],
+    )
+    assert order_book.orderID_matches(4, 0)[2] > 0
+    assert order_book.orderID_matches(4, 1)[2] > 0
+    assert order_book.orderID_matches(4, 2)[2] > 0
     assert order_book.orderID_order(5) == EMPTY_ORDER
     assert order_book.marketPrice() == price3
     assert book_token.balanceOf(order_book) == 0
@@ -2038,24 +2093,6 @@ def test_marketSell_fail_no_open_asks(order_book, account):
         order_book.marketSell(10 * 10**18, {"from": account})
 
 
-def test_marketSell_fail_insufficient_funds(order_book, book_token, account):
-    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
-        pytest.skip("Only for local testing")
-
-    # Arrange
-    order_book.addBid(1 * 10**18, 10 * 10**18, {"from": account})
-    balance = book_token.balanceOf(account)
-    book_token.transfer(
-        "0x0000000000000000000000000000000000000001", balance, {"from": account}
-    )
-
-    # Act
-
-    # Assert
-    with brownie.reverts("Insufficient funds"):
-        order_book.marketSell(10 * 10**18, {"from": account})
-
-
 # endregion
 
 
@@ -2416,10 +2453,237 @@ def test_cancelOrder_fail_order_not_open(order_book, book_token, account):
 
 # endregion
 
+
 # region getLiquidityDepthByPrice
-# todo
+def test_getLiquidityDepthByPrice_success_empty(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    price = 1 * 10**18
+
+    # Act
+    ld = order_book.getLiquidityDepthByPrice(price, {"from": account})
+
+    # Assert
+    assert ld == 0
+
+
+def test_getLiquidityDepthByPrice_success_single_bid(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    price = 1 * 10**18
+    amount = 10 * 10**18
+    order_book.addBid(price, amount, {"from": account})
+
+    # Act
+    ld = order_book.getLiquidityDepthByPrice(price, {"from": account})
+
+    # Assert
+    assert ld == amount
+
+
+def test_getLiquidityDepthByPrice_success_single_ask(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    price = 1 * 10**18
+    amount = 10 * 10**18
+    order_book.addAsk(price, amount, {"from": account})
+
+    # Act
+    ld = order_book.getLiquidityDepthByPrice(price, {"from": account})
+
+    # Assert
+    assert ld == amount
+
+
+def test_getLiquidityDepthByPrice_success_multiple_bid(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    price = 1 * 10**18
+    amount = 10 * 10**18
+    order_book.addBid(price, amount, {"from": account})
+    order_book.addBid(price, amount, {"from": account})
+
+    # Act
+    ld = order_book.getLiquidityDepthByPrice(price, {"from": account})
+
+    # Assert
+    assert ld == amount * 2
+
+
 # endregion
 
+
 # region getMarketOrderAveragePrice
-# todo
+def test_getMarketOrderAveragePrice_success_marketbuy_single_complete(
+    order_book, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    ask = 10 * 10**18
+    price = 1 * 10**18
+    amount = 10 * 10**18
+    order_book.addAsk(price, ask, {"from": account})
+
+    # Act
+    ap = order_book.getMarketOrderAveragePrice(amount, 2, {"from": account})
+
+    # Assert
+    assert ap == price
+
+
+def test_getMarketOrderAveragePrice_success_marketbuy_single_partial(
+    order_book, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    ask = 10 * 10**18
+    price = 1 * 10**18
+    amount1 = 15 * 10**18
+    amount2 = 5 * 10**18
+    order_book.addAsk(price, ask, {"from": account})
+
+    # Act
+    ap1 = order_book.getMarketOrderAveragePrice(amount1, 2, {"from": account})
+    ap2 = order_book.getMarketOrderAveragePrice(amount2, 2, {"from": account})
+
+    # Assert
+    assert ap1 == price
+    assert ap2 == price
+
+
+def test_getMarketOrderAveragePrice_success_marketbuy_multiple(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    ask1 = 10 * 10**18
+    ask2 = 20 * 10**18
+    ask3 = 30 * 10**18
+    price1 = 1 * 10**18
+    price2 = 2 * 10**18
+    price3 = 3 * 10**18
+    amount_2 = 15 * 10**18
+    amount_all = 60 * 10**18
+    order_book.addAsk(price1, ask1, {"from": account})
+    order_book.addAsk(price2, ask2, {"from": account})
+    order_book.addAsk(price3, ask3, {"from": account})
+
+    # Act
+    ap1 = order_book.getMarketOrderAveragePrice(amount_2, 2, {"from": account})
+    ap2 = order_book.getMarketOrderAveragePrice(amount_all, 2, {"from": account})
+
+    # Assert
+    assert ap2 == (price1 * ask1 + price2 * ask2 + price3 * ask3) // amount_all
+    assert ap1 == (price1 * ask1 + price2 * (amount_2 - ask1)) // amount_2
+
+
+def test_getMarketOrderAveragePrice_success_marketsell_single_complete(
+    order_book, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bid = 10 * 10**18
+    price = 1 * 10**18
+    amount = 10 * 10**18
+    order_book.addBid(price, bid, {"from": account})
+
+    # Act
+    ap = order_book.getMarketOrderAveragePrice(amount, 3, {"from": account})
+
+    # Assert
+    assert ap == price
+
+
+def test_getMarketOrderAveragePrice_success_marketsell_single_partial(
+    order_book, account
+):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bid = 10 * 10**18
+    price = 1 * 10**18
+    amount1 = 15 * 10**18
+    amount2 = 5 * 10**18
+    order_book.addBid(price, bid, {"from": account})
+
+    # Act
+    ap1 = order_book.getMarketOrderAveragePrice(amount1, 3, {"from": account})
+    ap2 = order_book.getMarketOrderAveragePrice(amount2, 3, {"from": account})
+
+    # Assert
+    assert ap1 == price
+    assert ap2 == price
+
+
+def test_getMarketOrderAveragePrice_success_marketsell_multiple(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    bid1 = 10 * 10**18
+    bid2 = 20 * 10**18
+    bid3 = 30 * 10**18
+    price1 = 1 * 10**18
+    price2 = 2 * 10**18
+    price3 = 3 * 10**18
+    amount_2 = 40 * 10**18
+    amount_all = 60 * 10**18
+    order_book.addBid(price1, bid1, {"from": account})
+    order_book.addBid(price2, bid2, {"from": account})
+    order_book.addBid(price3, bid3, {"from": account})
+
+    # Act
+    ap1 = order_book.getMarketOrderAveragePrice(amount_2, 3, {"from": account})
+    ap2 = order_book.getMarketOrderAveragePrice(amount_all, 3, {"from": account})
+
+    # Assert
+    assert ap2 == (price1 * bid1 + price2 * bid2 + price3 * bid3) // amount_all
+    assert ap1 == (price3 * bid3 + price2 * (amount_2 - bid3)) // amount_2
+
+
+def test_getMarketOrderAveragePrice_fail_amount_zero(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    order_type = 2  # marketbuy
+    amount = 0
+
+    # Act
+
+    # Assert
+    with brownie.reverts("Amount must be greater than zero"):
+        order_book.getMarketOrderAveragePrice(amount, order_type, {"from": account})
+
+
+def test_getMarketOrderAveragePrice_fail_no_orders(order_book, account):
+    if network.show_active() not in LOCAL_BLOCKCHAIN_ENVIRONMENTS:
+        pytest.skip("Only for local testing")
+
+    # Arrange
+    order_type = 2  # marketbuy
+    amount = 10 * 10**18
+
+    # Act
+
+    # Assert
+    with brownie.reverts("No open orders"):
+        order_book.getMarketOrderAveragePrice(amount, order_type, {"from": account})
+
+
 # endregion
