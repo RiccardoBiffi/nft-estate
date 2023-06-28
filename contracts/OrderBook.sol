@@ -6,6 +6,7 @@ import "./interfaces/IOrderBook.sol";
 
 //security avoid reentrancy attacks
 //todo add and test events
+//todo manage erc-1155 tokens
 
 contract OrderBook is IOrderBook {
     struct Order {
@@ -43,8 +44,8 @@ contract OrderBook is IOrderBook {
     mapping(uint256 => Order) public orderID_order;
     mapping(uint256 => Match[]) public orderID_matches;
     mapping(address => uint256[]) public user_ordersId;
-    mapping(uint256 => uint256[]) public price_openAsks; // asks ordered by time
-    mapping(uint256 => uint256[]) public price_openBids; // bids ordered by time
+    mapping(uint256 => uint256[]) private price_openAsks; // asks ordered by time
+    mapping(uint256 => uint256[]) private price_openBids; // bids ordered by time
     // stack of all open asks ordered by pricePerUnit asc, [length-1] is the best
     uint256[] public openAsksStack;
     // stack of all open bids ordered by pricePerUnit desc, [length-1] is the best
