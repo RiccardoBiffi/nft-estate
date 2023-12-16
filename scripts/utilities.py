@@ -3,7 +3,6 @@ from brownie import Contract, network, accounts, config
 from brownie import MockV3Aggregator, MockWETH, MockDAI
 import eth_utils
 
-FORKED_LOCAL_ENVIRONMENTS = ["mainnet-fork", "mainnet-fork-dev"]
 LOCAL_BLOCKCHAIN_ENVIRONMENTS = ["development", "ganache-local"]
 OPENSEA_URL = "https://testnets.opensea.io/assets/{}/{}"  # contract_address/token_ID
 DECIMALS = 18

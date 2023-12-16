@@ -1,9 +1,7 @@
-from sqlite3 import Time
 import time
 from brownie import OrderBook, MockERC20
 from scripts.deploy import publish_source_policy
 from scripts.utilities import (
-    LOCAL_BLOCKCHAIN_ENVIRONMENTS,
     MockContract,
     get_account,
 )
@@ -12,34 +10,34 @@ from scripts.utilities import (
 def deploy_order_book():
     account = get_account()
 
-    # book_token = MockERC20.deploy(
-    #     "Book Order Token",
-    #     "BOOK",
-    #     {"from": account},
-    #     publish_source=publish_source_policy(),
-    # )
-    # book_token.mint(account, 1000000 * 10**18, {"from": account})
-    # book_token.mint(
-    #     "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
-    #     1000000 * 10**18,
-    #     {"from": account},
-    # )
-    # price_token = MockERC20.deploy(
-    #     "Price Token",
-    #     "PRICE",
-    #     {"from": account},
-    #     publish_source=publish_source_policy(),
-    # )
-    # price_token.mint(account, 1000000 * 10**18, {"from": account})
-    # price_token.mint(
-    #     "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
-    #     1000000 * 10**18,
-    #     {"from": account},
-    # )
+    book_token = MockERC20.deploy(
+        "Book Order Token",
+        "BOOK",
+        {"from": account},
+        publish_source=publish_source_policy(),
+    )
+    book_token.mint(account, 1000000 * 10**18, {"from": account})
+    book_token.mint(
+        "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
+        1000000 * 10**18,
+        {"from": account},
+    )
+    price_token = MockERC20.deploy(
+        "Price Token",
+        "PRICE",
+        {"from": account},
+        publish_source=publish_source_policy(),
+    )
+    price_token.mint(account, 1000000 * 10**18, {"from": account})
+    price_token.mint(
+        "0x12540A0801d50AF38E10cbf00094c59AEdf632B5",
+        1000000 * 10**18,
+        {"from": account},
+    )
 
     OrderBook.deploy(
-        "0xFE87eED5A47341FBE20D25BCc4bC4C103C088bf5",  # book_token.address,
-        "0xE49836EfB8f483e3B330E859b4e815017bb3A9bb",  # price_token.address,
+        book_token.address,  # book_token.address,
+        price_token.address,  # price_token.address,
         {"from": account},
         publish_source=publish_source_policy(),
     )
