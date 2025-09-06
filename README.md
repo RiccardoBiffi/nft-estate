@@ -6,8 +6,9 @@ The platform allows the users to:
 1. See the catalog of the houses including their position and performance.
 2. Buy the NFTs with stablecoins
 3. Withdraw the API derived from the owned NFTs
-4. Buy $BRICK tokens
-5. Sell $BRICK tokens
+4. Use the order book to place buy and sell orders
+5. Buy $BRICK tokens
+6. Sell $BRICK tokens
 
 ## Owner functionalities
 The owner is a public address managed with a multi-signature wallet that can.
@@ -18,6 +19,3 @@ The owner is a public address managed with a multi-signature wallet that can.
 
 ## Protocol token
 The $BRICK token mainly rappresents a share of the Coincrete company.
-
-# Roadmap
-- change the order book to accepr STOP LIMIT orders, that are orders that are inserted into the order book only when the price reaches a certain value. This can be done by creating an array of StopLimitOrder prices and then, during a market order, when the price reaches the stop price, the order is inserted into the order book in the price queue.
